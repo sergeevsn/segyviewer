@@ -26,7 +26,7 @@ MainWindow::MainWindow(QWidget *parent)
     currentGain(5.0f)
 {
     setWindowTitle("SEG-Y Viewer");
-    resize(1800, 1000); // Увеличенный размер для лучшего отображения данных
+    resize(1600, 800); // Увеличенный размер для лучшего отображения данных
 
     QWidget *central = new QWidget(this);
     
