@@ -27,23 +27,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     mainLayout->addWidget(displayGroup);
     
-    // Группа 2: Trace Step Settings
-    QGroupBox* stepGroup = new QGroupBox("", this);
-    QVBoxLayout* stepLayout = new QVBoxLayout(stepGroup);
-    
-    // Trace Step
-    QHBoxLayout* stepControlLayout = new QHBoxLayout();
-    QLabel* stepLabel = new QLabel("Trace Step:", this);
-    stepSpinBox = new QSpinBox(this);
-    stepSpinBox->setRange(1, 100);
-    stepSpinBox->setValue(10);
-    stepControlLayout->addWidget(stepLabel);
-    stepControlLayout->addWidget(stepSpinBox);
-    stepLayout->addLayout(stepControlLayout);
-    
-    mainLayout->addWidget(stepGroup);
-    
-    // Группа 3: Samples Per Page Settings
+    // Группа 2: Samples Per Page Settings
     QGroupBox* samplesGroup = new QGroupBox("", this);
     QVBoxLayout* samplesLayout = new QVBoxLayout(samplesGroup);
     
@@ -60,7 +44,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     mainLayout->addWidget(samplesGroup);
     
-    // Группа 4: Color Settings
+    // Группа 3: Color Settings
     QGroupBox* colorGroup = new QGroupBox("", this);
     QVBoxLayout* colorLayout = new QVBoxLayout(colorGroup);
     
@@ -76,7 +60,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     mainLayout->addWidget(colorGroup);
     
-    // Группа 5: Image Settings
+    // Группа 4: Image Settings
     QGroupBox* imageGroup = new QGroupBox("", this);
     QVBoxLayout* imageLayout = new QVBoxLayout(imageGroup);
     
@@ -94,41 +78,35 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     mainLayout->addWidget(imageGroup);
     
-    // Группа 6: Cache Settings
-    QGroupBox* cacheGroup = new QGroupBox("", this);
-    QVBoxLayout* cacheLayout = new QVBoxLayout(cacheGroup);
+    // Группа 5: Grid Settings
+    QGroupBox* gridGroup = new QGroupBox("", this);
+    QVBoxLayout* gridLayout = new QVBoxLayout(gridGroup);
     
-    // Cache size
-    QHBoxLayout* cacheSizeLayout = new QHBoxLayout();
-    QLabel* cacheLabel = new QLabel("Cache size:", this);
-    cacheSpinBox = new QSpinBox(this);
-    cacheSpinBox->setRange(100, 10000);
-    cacheSpinBox->setValue(1000);
-    cacheSizeLayout->addWidget(cacheLabel);
-    cacheSizeLayout->addWidget(cacheSpinBox);
-    cacheLayout->addLayout(cacheSizeLayout);
+    // Grid checkbox
+    QHBoxLayout* gridLayout2 = new QHBoxLayout();
+    QLabel* gridLabel = new QLabel("Grid:", this);
+    gridCheckBox = new QCheckBox(this);
+    gridCheckBox->setChecked(true); // По умолчанию сетка включена
+    gridLayout2->addWidget(gridLabel);
+    gridLayout2->addWidget(gridCheckBox);
+    gridLayout->addLayout(gridLayout2);
     
-    mainLayout->addWidget(cacheGroup);
+    mainLayout->addWidget(gridGroup);
     
     // Добавляем растягивающийся элемент в конец
     mainLayout->addStretch();
     
     // Подключаем сигналы
     connect(tracesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTracesPerPageChanged()));
-    connect(stepSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onNavigationStepChanged()));
     connect(samplesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onSamplesPerPageChanged()));
     connect(colorCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(onColorSchemeChanged()));
     connect(gainSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onGainChanged()));
-    connect(cacheSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onCacheSizeChanged()));
+    connect(gridCheckBox, SIGNAL(toggled(bool)), this, SLOT(onGridEnabledChanged()));
 }
 
 // Геттеры
 int SettingsPanel::getTracesPerPage() const {
     return tracesSpinBox->value();
-}
-
-int SettingsPanel::getNavigationStep() const {
-    return stepSpinBox->value();
 }
 
 int SettingsPanel::getSamplesPerPage() const {
@@ -143,17 +121,13 @@ float SettingsPanel::getGain() const {
     return static_cast<float>(gainSpinBox->value());
 }
 
-int SettingsPanel::getCacheSize() const {
-    return cacheSpinBox->value();
+bool SettingsPanel::getGridEnabled() const {
+    return gridCheckBox->isChecked();
 }
 
 // Сеттеры
 void SettingsPanel::setTracesPerPage(int value) {
     tracesSpinBox->setValue(value);
-}
-
-void SettingsPanel::setNavigationStep(int value) {
-    stepSpinBox->setValue(value);
 }
 
 void SettingsPanel::setSamplesPerPage(int value) {
@@ -168,16 +142,12 @@ void SettingsPanel::setGain(float value) {
     gainSpinBox->setValue(value);
 }
 
-void SettingsPanel::setCacheSize(int value) {
-    cacheSpinBox->setValue(value);
+void SettingsPanel::setGridEnabled(bool enabled) {
+    gridCheckBox->setChecked(enabled);
 }
 
 // Слоты для синхронизации
 void SettingsPanel::onTracesPerPageChanged() {
-    emit settingsChanged();
-}
-
-void SettingsPanel::onNavigationStepChanged() {
     emit settingsChanged();
 }
 
@@ -193,6 +163,6 @@ void SettingsPanel::onGainChanged() {
     emit settingsChanged();
 }
 
-void SettingsPanel::onCacheSizeChanged() {
+void SettingsPanel::onGridEnabledChanged() {
     emit settingsChanged();
 }

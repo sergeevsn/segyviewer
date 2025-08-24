@@ -24,6 +24,7 @@ public:
     int getStartSample() const { return startSampleIndex; }
     void setColorScheme(const QString& scheme);
     void setGain(float g) { gain = g; colorMapValid = false; }
+    void setGridEnabled(bool enabled) { gridEnabled = enabled; update(); }
 
 signals:
     void traceInfoUnderCursor(int traceIndex, int sampleIndex, float amplitude);
@@ -35,6 +36,7 @@ protected:
 private:
     void updateColorMap();
     uint32_t amplitudeToRgb(float amplitude) const; // быстрый доступ через LUT
+    int calculateOptimalTimeStep(float totalTimeMs, int height, int labelSpacing) const; // расчет оптимального шага времени
 
     SegyDataManager* dataManager;
     int pageIndex;
@@ -50,6 +52,7 @@ private:
     bool colorMapValid;
     float gain;
     bool globalStatsComputed;
+    bool gridEnabled;      // Включена ли сетка
 
     std::vector<uint32_t> lut; // таблица цветов (256 уровней)
 };

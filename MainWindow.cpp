@@ -26,7 +26,7 @@ MainWindow::MainWindow(QWidget *parent)
     currentGain(5.0f)
 {
     setWindowTitle("SEG-Y Viewer");
-    resize(1500, 1050); // 1.5 раза больше
+    resize(1800, 1000); // Увеличенный размер для лучшего отображения данных
 
     QWidget *central = new QWidget(this);
     
@@ -57,8 +57,8 @@ MainWindow::MainWindow(QWidget *parent)
     verticalScrollBar->setFixedWidth(20);
     
     // Добавляем левую часть и панель с информацией о трассе
-    mainLayout->addWidget(leftWidget, 7); // 70% для основного содержимого
-    mainLayout->addWidget(traceInfoPanel, 3); // 30% для панели с информацией
+    mainLayout->addWidget(leftWidget, 8); // 80% для основного содержимого
+    mainLayout->addWidget(traceInfoPanel, 2); // 20% для панели с информацией
     
     central->setLayout(mainLayout);
     setCentralWidget(central);
@@ -71,7 +71,6 @@ MainWindow::MainWindow(QWidget *parent)
     
     // Инициализируем панель настроек
     settingsPanel->setTracesPerPage(1000);
-    settingsPanel->setNavigationStep(10);
     settingsPanel->setSamplesPerPage(0);
     settingsPanel->setColorScheme("gray");
     settingsPanel->setGain(currentGain);
@@ -134,11 +133,11 @@ void MainWindow::openAsTraces() {
     viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
     viewer->setCurrentPage(0);
     viewer->setGain(currentGain); // Применяем gain сразу при загрузке
+    viewer->setGridEnabled(settingsPanel->getGridEnabled()); // Применяем настройку сетки
     
     // Настраиваем горизонтальный скролл-бар
     int totalTraces = dataManager->traceCount();
     int tracesPerPage = settingsPanel->getTracesPerPage();
-    int navigationStep = settingsPanel->getNavigationStep();
     int maxValue = std::max(0, totalTraces - tracesPerPage);
     
     scrollBar->setVisible(true);
@@ -146,7 +145,7 @@ void MainWindow::openAsTraces() {
     scrollBar->setMaximum(maxValue);
     scrollBar->setValue(0);
     scrollBar->setPageStep(tracesPerPage);
-    scrollBar->setSingleStep(navigationStep); // Синхронизируем с Navigation Step
+    scrollBar->setSingleStep(10); // Фиксированный шаг навигации
     
     // Настраиваем вертикальный скролл-бар для сэмплов
     int samplesPerPage = settingsPanel->getSamplesPerPage();
@@ -188,7 +187,8 @@ void MainWindow::onVerticalScrollBarChanged(int value) {
 }
 
 void MainWindow::traceUnderCursor(int traceIndex, int sampleIndex, float amplitude) {
-    statusPanel->updateInfo(traceIndex, sampleIndex, amplitude);
+    float dt = dataManager ? dataManager->getSampleInterval() : 0.0f;
+    statusPanel->updateInfo(traceIndex, sampleIndex, amplitude, dt);
     
     // Обновляем информацию о заголовке трассы
     if (dataManager) {
@@ -212,10 +212,11 @@ void MainWindow::onSettingsChanged() {
     viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
     viewer->setColorScheme(settingsPanel->getColorScheme());
     viewer->setGain(settingsPanel->getGain());
+    viewer->setGridEnabled(settingsPanel->getGridEnabled());
 
     
-    // Обновляем размер кэша
-    dataManager->setCacheSize(settingsPanel->getCacheSize());
+    // Устанавливаем фиксированный размер кэша (5000)
+    dataManager->setCacheSize(5000);
     
     // Обновляем gain
     currentGain = settingsPanel->getGain();
@@ -224,12 +225,11 @@ void MainWindow::onSettingsChanged() {
     if (dataManager && dataManager->traceCount() > 0) {
         int totalTraces = dataManager->traceCount();
         int tracesPerPage = settingsPanel->getTracesPerPage();
-        int navigationStep = settingsPanel->getNavigationStep();
         int maxValue = std::max(0, totalTraces - tracesPerPage);
         
         scrollBar->setMaximum(maxValue);
         scrollBar->setPageStep(tracesPerPage);
-        scrollBar->setSingleStep(navigationStep); // Обновляем SingleStep при изменении Navigation Step
+        scrollBar->setSingleStep(10); // Фиксированный шаг навигации
         
         // Убеждаемся, что текущее значение не превышает максимум
         if (scrollBar->value() > maxValue) {

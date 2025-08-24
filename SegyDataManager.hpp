@@ -17,6 +17,7 @@ public:
     std::vector<std::vector<float>> getTracesRange(int startTrace, int count) const;
     std::vector<uint8_t> getTraceHeader(int traceIndex) const;
     int traceCount() const { return totalTraces; }
+    float getSampleInterval() const { return reader ? reader->sample_interval() : 0.0f; }
     
     // Настройки кэша
     void setCacheSize(int size);
