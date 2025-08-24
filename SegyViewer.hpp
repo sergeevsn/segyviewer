@@ -2,6 +2,7 @@
 #include <QWidget>
 #include <vector>
 #include <limits>
+#include <cstdint>
 
 class SegyDataManager;
 
@@ -33,14 +34,14 @@ protected:
 
 private:
     void updateColorMap();
-    QColor amplitudeToColor(float amplitude) const;
-    
+    uint32_t amplitudeToRgb(float amplitude) const; // быстрый доступ через LUT
+
     SegyDataManager* dataManager;
     int pageIndex;
-    int startTraceIndex; // Начальный индекс трассы для отображения
+    int startTraceIndex;   // Начальный индекс трассы для отображения
     int tracesPerPage;
-    int samplesPerPage; // Количество сэмплов на страницу (0 = все сэмплы)
-    int startSampleIndex; // Начальный индекс сэмпла для отображения
+    int samplesPerPage;    // Количество сэмплов на страницу (0 = все сэмплы)
+    int startSampleIndex;  // Начальный индекс сэмпла для отображения
     QString colorScheme;
     
     // Для цветовой карты
@@ -49,5 +50,6 @@ private:
     bool colorMapValid;
     float gain;
     bool globalStatsComputed;
-};
 
+    std::vector<uint32_t> lut; // таблица цветов (256 уровней)
+};

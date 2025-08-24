@@ -31,7 +31,7 @@ void SegyViewer::setDataManager(SegyDataManager* manager) {
 
 void SegyViewer::setColorScheme(const QString& scheme) {
     colorScheme = scheme;
-    colorMapValid = false; // Нужно пересчитать цветовую карту
+    colorMapValid = false; // нужно пересчитать цветовую карту
     update();
 }
 
@@ -54,9 +54,7 @@ void SegyViewer::setStartTrace(int traceIndex) {
         startTraceIndex = traceIndex;
         pageIndex = traceIndex / tracesPerPage;
         
-        // Инвалидируем цветовую карту при изменении трасс
         colorMapValid = false;
-        
         update();
     }
 }
@@ -78,86 +76,37 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
         return;
     }
 
-    // Обновляем цветовую карту если нужно
     if (!colorMapValid) {
         updateColorMap();
     }
 
-    int width = this->width();
-    int height = this->height();
     int traceCount = traces.size();
     int maxSamples = 0;
-    
-    // Находим максимальное количество сэмплов
-    for (const auto& trace : traces) {
-        maxSamples = std::max(maxSamples, static_cast<int>(trace.size()));
-    }
-    
+    for (const auto& tr : traces)
+        maxSamples = std::max(maxSamples, static_cast<int>(tr.size()));
     if (maxSamples == 0) return;
 
-    // Определяем количество сэмплов для отображения
     int samplesToShow = (samplesPerPage > 0) ? std::min(samplesPerPage, maxSamples) : maxSamples;
-    
-    // Вычисляем размеры пикселей
-    double pixelWidth = static_cast<double>(width) / traceCount;
-    double pixelHeight = static_cast<double>(height) / samplesToShow;
 
-    // Рисуем растровое изображение с интерполяцией на разрешение экрана
-    
-    // Интерполируем данные на разрешение экрана
-    for (int screenX = 0; screenX < width; ++screenX) {
-        // Находим соответствующие трассы для этого пикселя экрана
-        double tracePos = (screenX * traceCount) / static_cast<double>(width);
-        int traceIdx1 = static_cast<int>(tracePos);
-        int traceIdx2 = std::min(traceIdx1 + 1, traceCount - 1);
-        double weight = tracePos - traceIdx1;
-        
-        for (int screenY = 0; screenY < height; ++screenY) {
-            // Находим соответствующие сэмплы для этого пикселя экрана
-            double samplePos = (screenY * samplesToShow) / static_cast<double>(height);
-            int sampleIdx1 = static_cast<int>(samplePos) + startSampleIndex;
-            int sampleIdx2 = std::min(sampleIdx1 + 1, maxSamples - 1);
-            double sampleWeight = samplePos - static_cast<int>(samplePos);
-            
-            // Проверяем, что индексы сэмплов находятся в допустимых пределах
-            if (sampleIdx1 >= maxSamples) continue;
-            
-            // Билинейная интерполяция
-            float amplitude = 0.0f;
-            int validSamples = 0;
-            
-            // Интерполируем между трассами
-            for (int t = traceIdx1; t <= traceIdx2; ++t) {
-                if (t >= 0 && t < traceCount) {
-                    const auto& trace = traces[t];
-                    double traceWeight = (t == traceIdx1) ? (1.0 - weight) : weight;
-                    
-                    // Интерполируем между сэмплами
-                    for (int s = sampleIdx1; s <= sampleIdx2; ++s) {
-                        if (s >= 0 && s < static_cast<int>(trace.size())) {
-                            double sampleWeight2 = (s == sampleIdx1) ? (1.0 - sampleWeight) : sampleWeight;
-                            amplitude += trace[s] * traceWeight * sampleWeight2;
-                            validSamples++;
-                        }
-                    }
-                }
-            }
-            
-            if (validSamples > 0) {
-                amplitude /= validSamples;
-                QColor color = amplitudeToColor(amplitude);
-                p.setPen(color);
-                p.drawPoint(screenX, screenY);
-            }
+    // Создаём QImage и сразу заполняем его данными
+    QImage img(traceCount, samplesToShow, QImage::Format_ARGB32);
+    for (int y = 0; y < samplesToShow; ++y) {
+        QRgb* line = reinterpret_cast<QRgb*>(img.scanLine(y));
+        for (int x = 0; x < traceCount; ++x) {
+            float amp = traces[x][y + startSampleIndex];
+            line[x] = amplitudeToRgb(amp);
         }
     }
+
+    // Включаем сглаживание при масштабировании (как в matplotlib imshow)
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    p.drawImage(rect(), img);
 }
 
 void SegyViewer::updateColorMap() {
     if (!dataManager) return;
 
     if (!globalStatsComputed) {
-        // Вычисляем глобальные статистики один раз на основе первых 1000 трасс
         auto traces = dataManager->getTracesRange(0, 1000);
         if (!traces.empty()) {
             minAmplitude = std::numeric_limits<float>::max();
@@ -172,7 +121,6 @@ void SegyViewer::updateColorMap() {
                 }
             }
 
-            // Если все значения одинаковые, устанавливаем небольшой диапазон
             if (std::abs(maxAmplitude - minAmplitude) < 1e-6) {
                 maxAmplitude = minAmplitude + 1.0f;
             }
@@ -181,39 +129,34 @@ void SegyViewer::updateColorMap() {
         }
     }
 
+    // Заполняем LUT (256 цветов)
+    lut.resize(256);
+    for (int i = 0; i < 256; ++i) {
+        float norm = i / 255.0f;
+        QColor c = ColorSchemes::getColor(norm, colorScheme);
+        lut[i] = c.rgba();
+    }
+
     colorMapValid = true;
 }
 
-QColor SegyViewer::amplitudeToColor(float amplitude) const {
-    if (!colorMapValid) return Qt::black;
-    
-    // Проверка на некорректные данные
+uint32_t SegyViewer::amplitudeToRgb(float amplitude) const {
     if (!std::isfinite(amplitude)) {
-        return Qt::gray;
+        return qRgba(128, 128, 128, 255); // серый для NaN
     }
-    
-    // Вычисляем эффективные границы с учётом gain
-    // gain = 1.0 - используем полный диапазон [minAmplitude, maxAmplitude]
-    // gain > 1.0 - сужаем диапазон, отсекая крайние значения
+
     float range = maxAmplitude - minAmplitude;
-    float centerAmplitude = (maxAmplitude + minAmplitude) * 0.5f;
-    
-    // Чем больше gain, тем меньше эффективный диапазон
+    float center = 0.5f * (maxAmplitude + minAmplitude);
     float effectiveRange = range / gain;
-    float effectiveMin = centerAmplitude - effectiveRange * 0.5f;
-    float effectiveMax = centerAmplitude + effectiveRange * 0.5f;
-    
-    // Нормализуем амплитуду относительно эффективного диапазона
-    float normalized = 0.5f; // по умолчанию средний серый
-    if (effectiveRange > 0.0f) {
-        normalized = (amplitude - effectiveMin) / effectiveRange;
-    }
-    
-    // Ограничиваем значение в диапазоне [0, 1]
-    normalized = std::max(0.0f, std::min(1.0f, normalized));
-    
-    // Используем новый класс ColorSchemes для получения цвета
-    return ColorSchemes::getColor(normalized, colorScheme);
+    float minEff = center - effectiveRange * 0.5f;
+    float maxEff = center + effectiveRange * 0.5f;
+
+    float norm = (amplitude - minEff) / effectiveRange;
+    if (norm < 0.0f) norm = 0.0f;
+    if (norm > 1.0f) norm = 1.0f;
+
+    int idx = static_cast<int>(norm * 255.0f);
+    return lut[idx];
 }
 
 void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
@@ -233,7 +176,6 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     
     if (maxSamples == 0) return;
 
-    // Определяем количество сэмплов для отображения
     int samplesToShow = (samplesPerPage > 0) ? std::min(samplesPerPage, maxSamples) : maxSamples;
 
     double pixelWidth = static_cast<double>(width) / traceCount;
@@ -248,4 +190,3 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     float amp = traces[traceIndex][sampleIndex];
     emit traceInfoUnderCursor(startTraceIndex + traceIndex, sampleIndex, amp);
 }
-
