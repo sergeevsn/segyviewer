@@ -24,6 +24,7 @@ private slots:
     void traceUnderCursor(int traceIndex, int sampleIndex, float amplitude);
     void onSettingsChanged();
     void onScrollBarChanged(int value);
+    void onVerticalScrollBarChanged(int value);
 
 private:
     void createMenus();
@@ -35,6 +36,7 @@ private:
     SettingsPanel* settingsPanel;
     TraceInfoPanel* traceInfoPanel;
     QScrollBar* scrollBar;
+    QScrollBar* verticalScrollBar; // Вертикальный скролл-бар для сэмплов
     
     // Навигация
     int navigationStep;

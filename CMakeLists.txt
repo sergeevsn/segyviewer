@@ -21,6 +21,7 @@ add_executable(SegyViewer
     SettingsPanel.cpp
     TraceInfoPanel.cpp
     SegyReader.cpp
+    ColorSchemes.cpp
 )
 
 target_link_libraries(SegyViewer

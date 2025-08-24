@@ -20,9 +20,10 @@ MainWindow::MainWindow(QWidget *parent)
       statusPanel(new StatusPanel(this)),
       settingsPanel(new SettingsPanel(this)),
       traceInfoPanel(new TraceInfoPanel(this)),
-      scrollBar(new QScrollBar(Qt::Horizontal, this)),
-      navigationStep(10),
-      currentGain(5.0f)
+          scrollBar(new QScrollBar(Qt::Horizontal, this)),
+    verticalScrollBar(new QScrollBar(Qt::Vertical, this)),
+    navigationStep(10),
+    currentGain(5.0f)
 {
     setWindowTitle("SEG-Y Viewer");
     resize(1500, 1050); // 1.5 раза больше
@@ -36,13 +37,24 @@ MainWindow::MainWindow(QWidget *parent)
     
     // Левая часть с графиком и настройками
     QWidget *leftWidget = new QWidget(this);
-    QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
+    QHBoxLayout *leftLayout = new QHBoxLayout(leftWidget);
     leftLayout->setContentsMargins(0,0,0,0);
     leftLayout->setSpacing(2);
-    leftLayout->addWidget(settingsPanel); // Панель настроек сверху (фиксированная высота)
-    leftLayout->addWidget(viewer, 1); // График занимает всю доступную высоту
-    leftLayout->addWidget(scrollBar); // Скролл-бар для навигации
-    leftLayout->addWidget(statusPanel); // Статусная панель (фиксированная высота)
+    
+    // Центральная часть с настройками, графиком и горизонтальным скролл-баром
+    QVBoxLayout *centerLayout = new QVBoxLayout();
+    centerLayout->setContentsMargins(0,0,0,0);
+    centerLayout->setSpacing(2);
+    centerLayout->addWidget(settingsPanel); // Панель настроек сверху (фиксированная высота)
+    centerLayout->addWidget(viewer, 1); // График занимает всю доступную высоту
+    centerLayout->addWidget(scrollBar); // Скролл-бар для навигации
+    centerLayout->addWidget(statusPanel); // Статусная панель (фиксированная высота)
+    
+    leftLayout->addLayout(centerLayout, 1);
+    leftLayout->addWidget(verticalScrollBar); // Вертикальный скролл-бар справа
+    
+    // Устанавливаем фиксированную ширину для вертикального скролл-бара
+    verticalScrollBar->setFixedWidth(20);
     
     // Добавляем левую часть и панель с информацией о трассе
     mainLayout->addWidget(leftWidget, 7); // 70% для основного содержимого
@@ -58,9 +70,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(settingsPanel, &SettingsPanel::settingsChanged, this, &MainWindow::onSettingsChanged);
     
     // Инициализируем панель настроек
-    settingsPanel->setTracesPerPage(200);
+    settingsPanel->setTracesPerPage(1000);
     settingsPanel->setNavigationStep(10);
-    settingsPanel->setColorScheme("Grayscale");
+    settingsPanel->setSamplesPerPage(0);
+    settingsPanel->setColorScheme("gray");
     settingsPanel->setGain(currentGain);
 
     connect(viewer, &SegyViewer::traceInfoUnderCursor,
@@ -77,8 +90,7 @@ void MainWindow::createMenus() {
     fileMenu->addSeparator();
     fileMenu->addAction("Exit", qApp, &QCoreApplication::quit);
 
-    QMenu* viewMenu = menuBar()->addMenu("&View");
-    // Настройки теперь в панели над графиком
+    // Меню View убрано - настройки теперь в панели над графиком
 }
 
 void MainWindow::setupScrollBar() {
@@ -90,6 +102,16 @@ void MainWindow::setupScrollBar() {
     scrollBar->setSingleStep(navigationStep); // Синхронизируем с Navigation Step
     
     connect(scrollBar, &QScrollBar::valueChanged, this, &MainWindow::onScrollBarChanged);
+    
+    // Настройка вертикального скролл-бара для сэмплов
+    verticalScrollBar->setVisible(false); // Скрыт по умолчанию
+    verticalScrollBar->setMinimum(0);
+    verticalScrollBar->setMaximum(0);
+    verticalScrollBar->setValue(0);
+    verticalScrollBar->setPageStep(1);
+    verticalScrollBar->setSingleStep(1);
+    
+    connect(verticalScrollBar, &QScrollBar::valueChanged, this, &MainWindow::onVerticalScrollBarChanged);
 }
 
 void MainWindow::openSettings() {
@@ -108,10 +130,12 @@ void MainWindow::openAsTraces() {
     }
 
     viewer->setDataManager(dataManager);
+    viewer->setTracesPerPage(settingsPanel->getTracesPerPage());
+    viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
     viewer->setCurrentPage(0);
     viewer->setGain(currentGain); // Применяем gain сразу при загрузке
     
-    // Настраиваем скролл-бар
+    // Настраиваем горизонтальный скролл-бар
     int totalTraces = dataManager->traceCount();
     int tracesPerPage = settingsPanel->getTracesPerPage();
     int navigationStep = settingsPanel->getNavigationStep();
@@ -124,12 +148,43 @@ void MainWindow::openAsTraces() {
     scrollBar->setPageStep(tracesPerPage);
     scrollBar->setSingleStep(navigationStep); // Синхронизируем с Navigation Step
     
+    // Настраиваем вертикальный скролл-бар для сэмплов
+    int samplesPerPage = settingsPanel->getSamplesPerPage();
+    if (samplesPerPage > 0) {
+        // Получаем количество сэмплов в первой трассе для оценки
+        auto traces = dataManager->getTracesRange(0, 1);
+        if (!traces.empty() && !traces[0].empty()) {
+            int totalSamples = traces[0].size();
+            int maxSampleValue = std::max(0, totalSamples - samplesPerPage);
+            
+            verticalScrollBar->setVisible(true);
+            verticalScrollBar->setMinimum(0);
+            verticalScrollBar->setMaximum(maxSampleValue);
+            verticalScrollBar->setValue(0);
+            verticalScrollBar->setPageStep(samplesPerPage);
+            
+            // Сбрасываем начальный сэмпл в viewer
+            viewer->setStartSample(0);
+        }
+    } else {
+        // Если samples per page = 0, скрываем вертикальный скролл-бар
+        verticalScrollBar->setVisible(false);
+        viewer->setStartSample(0);
+    }
+    
     viewer->update();
 }
 
 void MainWindow::onScrollBarChanged(int value) {
     // Устанавливаем начальную трассу напрямую
     viewer->setStartTrace(value);
+}
+
+void MainWindow::onVerticalScrollBarChanged(int value) {
+    // Устанавливаем начальный сэмпл напрямую
+    viewer->setStartSample(value);
+    // Обновляем отображение
+    viewer->update();
 }
 
 void MainWindow::traceUnderCursor(int traceIndex, int sampleIndex, float amplitude) {
@@ -154,6 +209,7 @@ MainWindow::~MainWindow() {
 void MainWindow::onSettingsChanged() {
     // Применяем новые настройки к viewer
     viewer->setTracesPerPage(settingsPanel->getTracesPerPage());
+    viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
     viewer->setColorScheme(settingsPanel->getColorScheme());
     viewer->setGain(settingsPanel->getGain());
 
@@ -164,7 +220,7 @@ void MainWindow::onSettingsChanged() {
     // Обновляем gain
     currentGain = settingsPanel->getGain();
     
-    // Обновляем скролл-бар если файл загружен
+    // Обновляем горизонтальный скролл-бар если файл загружен
     if (dataManager && dataManager->traceCount() > 0) {
         int totalTraces = dataManager->traceCount();
         int tracesPerPage = settingsPanel->getTracesPerPage();
@@ -178,6 +234,32 @@ void MainWindow::onSettingsChanged() {
         // Убеждаемся, что текущее значение не превышает максимум
         if (scrollBar->value() > maxValue) {
             scrollBar->setValue(maxValue);
+        }
+    }
+    
+    // Обновляем вертикальный скролл-бар для сэмплов
+    if (dataManager && dataManager->traceCount() > 0) {
+        int samplesPerPage = settingsPanel->getSamplesPerPage();
+        if (samplesPerPage > 0) {
+            // Получаем количество сэмплов в первой трассе для оценки
+            auto traces = dataManager->getTracesRange(0, 1);
+            if (!traces.empty() && !traces[0].empty()) {
+                int totalSamples = traces[0].size();
+                int maxSampleValue = std::max(0, totalSamples - samplesPerPage);
+                
+                verticalScrollBar->setVisible(true);
+                verticalScrollBar->setMinimum(0);
+                verticalScrollBar->setMaximum(maxSampleValue);
+                verticalScrollBar->setValue(0);
+                verticalScrollBar->setPageStep(samplesPerPage);
+                
+                // Сбрасываем начальный сэмпл в viewer
+                viewer->setStartSample(0);
+            }
+        } else {
+            // Если samples per page = 0, скрываем вертикальный скролл-бар
+            verticalScrollBar->setVisible(false);
+            viewer->setStartSample(0);
         }
     }
     

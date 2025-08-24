@@ -75,7 +75,6 @@ void TraceMap::create_table() {
 }
 
 void TraceMap::build_map(const SegyReader& reader, const std::string& sorting_key) {
-    std::cout << "Starting high-performance map build..." << std::endl;
     int n_traces = reader.num_traces();
     size_t n_keys = keys_.size();
     
@@ -188,7 +187,6 @@ void TraceMap::build_map(const SegyReader& reader, const std::string& sorting_ke
     
     sqlite3_finalize(stmt);
     check_db_error(sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr), "Commit transaction");
-    std::cout << "Trace map built successfully." << std::endl;
 }
 
 std::vector<int> TraceMap::find_trace_indices(const std::vector<std::optional<int>>& key_values) const {

@@ -17,6 +17,10 @@ public:
 
     void setTracesPerPage(int tpp) { tracesPerPage = tpp; }
     int getTracesPerPage() const { return tracesPerPage; }
+    void setSamplesPerPage(int spp) { samplesPerPage = spp; colorMapValid = false; }
+    int getSamplesPerPage() const { return samplesPerPage; }
+    void setStartSample(int sampleIndex) { startSampleIndex = sampleIndex; colorMapValid = false; }
+    int getStartSample() const { return startSampleIndex; }
     void setColorScheme(const QString& scheme);
     void setGain(float g) { gain = g; colorMapValid = false; }
 
@@ -35,6 +39,8 @@ private:
     int pageIndex;
     int startTraceIndex; // Начальный индекс трассы для отображения
     int tracesPerPage;
+    int samplesPerPage; // Количество сэмплов на страницу (0 = все сэмплы)
+    int startSampleIndex; // Начальный индекс сэмпла для отображения
     QString colorScheme;
     
     // Для цветовой карты

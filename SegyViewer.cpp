@@ -1,10 +1,10 @@
 #include "SegyViewer.hpp"
 #include "SegyDataManager.hpp"
+#include "ColorSchemes.hpp"
 #include <QPainter>
 #include <QMouseEvent>
 #include <algorithm>
 #include <limits>
-#include <iostream>
 #include <cmath>
 
 SegyViewer::SegyViewer(QWidget* parent)
@@ -12,13 +12,14 @@ SegyViewer::SegyViewer(QWidget* parent)
       dataManager(nullptr),
       pageIndex(0),
       startTraceIndex(0),
-      tracesPerPage(200),
+      tracesPerPage(1000),
+      samplesPerPage(0),
+      startSampleIndex(0),
       colorScheme("Grayscale"),
       minAmplitude(0.0f),
       maxAmplitude(1.0f),
       colorMapValid(false),
       gain(5.0f),
-
       globalStatsComputed(false)
 {
     setMouseTracking(true);
@@ -94,9 +95,12 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     
     if (maxSamples == 0) return;
 
+    // Определяем количество сэмплов для отображения
+    int samplesToShow = (samplesPerPage > 0) ? std::min(samplesPerPage, maxSamples) : maxSamples;
+    
     // Вычисляем размеры пикселей
     double pixelWidth = static_cast<double>(width) / traceCount;
-    double pixelHeight = static_cast<double>(height) / maxSamples;
+    double pixelHeight = static_cast<double>(height) / samplesToShow;
 
     // Рисуем растровое изображение с интерполяцией на разрешение экрана
     
@@ -110,10 +114,13 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
         
         for (int screenY = 0; screenY < height; ++screenY) {
             // Находим соответствующие сэмплы для этого пикселя экрана
-            double samplePos = (screenY * maxSamples) / static_cast<double>(height);
-            int sampleIdx1 = static_cast<int>(samplePos);
+            double samplePos = (screenY * samplesToShow) / static_cast<double>(height);
+            int sampleIdx1 = static_cast<int>(samplePos) + startSampleIndex;
             int sampleIdx2 = std::min(sampleIdx1 + 1, maxSamples - 1);
-            double sampleWeight = samplePos - sampleIdx1;
+            double sampleWeight = samplePos - static_cast<int>(samplePos);
+            
+            // Проверяем, что индексы сэмплов находятся в допустимых пределах
+            if (sampleIdx1 >= maxSamples) continue;
             
             // Билинейная интерполяция
             float amplitude = 0.0f;
@@ -171,8 +178,6 @@ void SegyViewer::updateColorMap() {
             }
             
             globalStatsComputed = true;
-            std::cout << "Global normalization computed: min=" << minAmplitude 
-                      << ", max=" << maxAmplitude << std::endl;
         }
     }
 
@@ -207,20 +212,8 @@ QColor SegyViewer::amplitudeToColor(float amplitude) const {
     // Ограничиваем значение в диапазоне [0, 1]
     normalized = std::max(0.0f, std::min(1.0f, normalized));
     
-    // Преобразуем в цвет
-    int intensity = static_cast<int>(normalized * 255.0f + 0.5f);
-    intensity = std::max(0, std::min(255, intensity));
-    
-    if (colorScheme == "Grayscale") {
-        return QColor(intensity, intensity, intensity);
-    } else if (colorScheme == "Red") {
-        return QColor(intensity, 0, 0);
-    } else if (colorScheme == "White") {
-        return QColor(intensity, intensity, intensity);
-    } else {
-        // По умолчанию grayscale
-        return QColor(intensity, intensity, intensity);
-    }
+    // Используем новый класс ColorSchemes для получения цвета
+    return ColorSchemes::getColor(normalized, colorScheme);
 }
 
 void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
@@ -240,11 +233,14 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     
     if (maxSamples == 0) return;
 
+    // Определяем количество сэмплов для отображения
+    int samplesToShow = (samplesPerPage > 0) ? std::min(samplesPerPage, maxSamples) : maxSamples;
+
     double pixelWidth = static_cast<double>(width) / traceCount;
-    double pixelHeight = static_cast<double>(height) / maxSamples;
+    double pixelHeight = static_cast<double>(height) / samplesToShow;
 
     int traceIndex = static_cast<int>(event->x() / pixelWidth);
-    int sampleIndex = static_cast<int>(event->y() / pixelHeight);
+    int sampleIndex = static_cast<int>(event->y() / pixelHeight) + startSampleIndex;
     
     if (traceIndex < 0 || traceIndex >= traceCount) return;
     if (sampleIndex < 0 || sampleIndex >= static_cast<int>(traces[traceIndex].size())) return;

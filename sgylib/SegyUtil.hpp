@@ -68,3 +68,6 @@ inline void put_u32_be(uint8_t* buf, uint32_t value) {
     buf[2] = static_cast<uint8_t>((value >> 8)  & 0xFF);
     buf[3] = static_cast<uint8_t>(value & 0xFF);
 }
+
+// Функция для отображения прогресса (отладочный вывод убран)
+void print_progress_bar(const std::string& message, int current, int total);

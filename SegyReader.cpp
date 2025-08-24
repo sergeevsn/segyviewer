@@ -1,11 +1,8 @@
 #include "SegyReader.hpp"
-#include <iostream>
 #include <algorithm>
 #include <cstring>
 
 SegyReader::SegyReader(const std::string& filename) : filename_(filename) {
-    std::cout << "Opening SEG-Y file: " << filename << std::endl;
-    
     // Проверяем, что файл существует
     std::ifstream test_file(filename);
     if (!test_file.good()) {
@@ -18,14 +15,11 @@ SegyReader::SegyReader(const std::string& filename) : filename_(filename) {
     if (!file_.is_open()) {
         throw std::runtime_error("Cannot open SEG-Y file: " + filename);
     }
-    std::cout << "File opened successfully" << std::endl;
     
     // Проверяем размер файла
     file_.seekg(0, std::ios::end);
     std::streamoff file_size = file_.tellg();
     file_.seekg(0, std::ios::beg);
-    
-    std::cout << "File size: " << file_size << " bytes" << std::endl;
     
     if (file_size < TEXT_HEADER_SIZE + BINARY_HEADER_SIZE) {
         throw std::runtime_error("File too small to be a valid SEG-Y file");
@@ -34,26 +28,20 @@ SegyReader::SegyReader(const std::string& filename) : filename_(filename) {
     // Читаем текстовый заголовок (3200 байт)
     text_header_.resize(TEXT_HEADER_SIZE);
     file_.read(text_header_.data(), TEXT_HEADER_SIZE);
-    std::cout << "Text header read: " << file_.gcount() << " bytes" << std::endl;
 
     // Читаем бинарный заголовок (400 байт)
     bin_header_.resize(BINARY_HEADER_SIZE);
     file_.read(reinterpret_cast<char*>(bin_header_.data()), BINARY_HEADER_SIZE);
-    std::cout << "Binary header read: " << file_.gcount() << " bytes" << std::endl;
 
     // Получаем информацию о трассах из бинарного заголовка
     try {
         num_samples_ = get_bin_header_value_i16("SamplesPerTrace");
         sample_interval_ = get_bin_header_value_i16("SampleInterval") / 1000.0f; // в микросекундах
         
-        std::cout << "Binary header - Samples per trace: " << num_samples_ << std::endl;
-        std::cout << "Binary header - Sample interval: " << sample_interval_ << " ms" << std::endl;
-        
         if (num_samples_ <= 0) {
             throw std::runtime_error("Invalid number of samples per trace: " + std::to_string(num_samples_));
         }
     } catch (const std::exception& e) {
-        std::cout << "Error reading binary header: " << e.what() << std::endl;
         throw;
     }
 
@@ -65,10 +53,6 @@ SegyReader::SegyReader(const std::string& filename) : filename_(filename) {
     if (num_traces_ <= 0) {
         throw std::runtime_error("Invalid number of traces: " + std::to_string(num_traces_));
     }
-
-    std::cout << "SEG-Y file loaded: " << num_traces_ << " traces, " 
-              << num_samples_ << " samples per trace, " 
-              << sample_interval_ << " ms sample interval" << std::endl;
 }
 
 SegyReader::~SegyReader() {

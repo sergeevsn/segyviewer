@@ -19,11 +19,10 @@ bool SegyDataManager::loadFile(const std::string& filename) {
         // Очищаем кэш при загрузке нового файла
         clearCache();
         
-        std::cout << "File loaded: " << totalTraces << " traces available" << std::endl;
+
         return true;
         
     } catch (const std::exception& e) {
-        std::cerr << "Error loading SEG-Y file: " << e.what() << std::endl;
         return false;
     }
 }
@@ -65,7 +64,6 @@ std::vector<float> SegyDataManager::getTraceFromCache(int traceIndex) const {
         addToCache(traceIndex, trace);
         return trace;
     } catch (const std::exception& e) {
-        std::cerr << "Error loading trace " << traceIndex << ": " << e.what() << std::endl;
         return {};
     }
 }
@@ -132,8 +130,6 @@ void SegyDataManager::computeGlobalStats(int numTraces) {
     globalMinAmplitude = std::numeric_limits<float>::max();
     globalMaxAmplitude = std::numeric_limits<float>::lowest();
     
-    std::cout << "Computing global stats from first " << tracesToAnalyze << " traces..." << std::endl;
-    
     for (int i = 0; i < tracesToAnalyze; ++i) {
         try {
             std::vector<float> trace = reader->get_trace(i);
@@ -143,13 +139,8 @@ void SegyDataManager::computeGlobalStats(int numTraces) {
                     globalMaxAmplitude = std::max(globalMaxAmplitude, amplitude);
                 }
             }
-            
-            // Показываем прогресс каждые 100 трасс
-            if ((i + 1) % 100 == 0) {
-                std::cout << "Processed " << (i + 1) << "/" << tracesToAnalyze << " traces" << std::endl;
-            }
         } catch (const std::exception& e) {
-            std::cerr << "Error loading trace " << i << " for global stats: " << e.what() << std::endl;
+            // Игнорируем ошибки при вычислении статистики
         }
     }
     
@@ -159,8 +150,6 @@ void SegyDataManager::computeGlobalStats(int numTraces) {
     }
     
     globalStatsValid = true;
-    std::cout << "Global stats computed: min=" << globalMinAmplitude 
-              << ", max=" << globalMaxAmplitude << std::endl;
 }
 
 
