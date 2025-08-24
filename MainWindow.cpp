@@ -125,6 +125,8 @@ void MainWindow::openAsTraces() {
 
     if (!dataManager->loadFile(fileName.toStdString())) {
         QMessageBox::warning(this, "Error", "Failed to load SEG-Y file");
+        // Сбрасываем информацию о файле в SettingsPanel
+        settingsPanel->setFileInfo(0, 0.0f);
         return;
     }
 
@@ -134,6 +136,18 @@ void MainWindow::openAsTraces() {
     viewer->setCurrentPage(0);
     viewer->setGain(currentGain); // Применяем gain сразу при загрузке
     viewer->setGridEnabled(settingsPanel->getGridEnabled()); // Применяем настройку сетки
+    
+    // Обновляем информацию о файле в SettingsPanel
+    int totalSamples = 0;
+    float dt = 0.0f;
+    if (dataManager->traceCount() > 0) {
+        auto traces = dataManager->getTracesRange(0, 1);
+        if (!traces.empty() && !traces[0].empty()) {
+            totalSamples = traces[0].size();
+            dt = dataManager->getSampleInterval();
+        }
+    }
+    settingsPanel->setFileInfo(totalSamples, dt);
     
     // Настраиваем горизонтальный скролл-бар
     int totalTraces = dataManager->traceCount();

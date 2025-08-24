@@ -33,12 +33,12 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     // Samples Per Page
     QHBoxLayout* samplesControlLayout = new QHBoxLayout();
-    QLabel* samplesLabel = new QLabel("Samples per page:", this);
+    QLabel* samplesPerPageLabel = new QLabel("Samples per page:", this);
     samplesSpinBox = new QSpinBox(this);
     samplesSpinBox->setRange(0, 10000);
     samplesSpinBox->setValue(0);
     samplesSpinBox->setSpecialValueText("All"); // 0 означает "все сэмплы"
-    samplesControlLayout->addWidget(samplesLabel);
+    samplesControlLayout->addWidget(samplesPerPageLabel);
     samplesControlLayout->addWidget(samplesSpinBox);
     samplesLayout->addLayout(samplesControlLayout);
     
@@ -93,8 +93,36 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     mainLayout->addWidget(gridGroup);
     
-    // Добавляем растягивающийся элемент в конец
+    // Группа 6: File Info (без заголовка)
+    QGroupBox* fileInfoGroup = new QGroupBox("", this);
+    QVBoxLayout* fileInfoLayout = new QVBoxLayout(fileInfoGroup);
+    
+    // Samples и dt в одной строке
+    QHBoxLayout* fileInfoRow = new QHBoxLayout();
+    
+    // Samples info
+    QLabel* samplesInfoLabel = new QLabel("Samples:", this);
+    samplesLabel = new QLabel("No file", this);
+    samplesLabel->setStyleSheet("QLabel { color: gray; }");
+    fileInfoRow->addWidget(samplesInfoLabel);
+    fileInfoRow->addWidget(samplesLabel);
+    
+    // Добавляем небольшой отступ между Samples и dt
+    fileInfoRow->addSpacing(15);
+    
+    // dt info
+    QLabel* dtInfoLabel = new QLabel("dt:", this);
+    dtLabel = new QLabel("No file", this);
+    dtLabel->setStyleSheet("QLabel { color: gray; }");
+    fileInfoRow->addWidget(dtInfoLabel);
+    fileInfoRow->addWidget(dtLabel);
+    
+    fileInfoLayout->addLayout(fileInfoRow);
+    
+    // Добавляем растягивающийся элемент перед File Info для выравнивания по правому краю
     mainLayout->addStretch();
+    
+    mainLayout->addWidget(fileInfoGroup);
     
     // Подключаем сигналы
     connect(tracesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTracesPerPageChanged()));
@@ -144,6 +172,24 @@ void SettingsPanel::setGain(float value) {
 
 void SettingsPanel::setGridEnabled(bool enabled) {
     gridCheckBox->setChecked(enabled);
+}
+
+void SettingsPanel::setFileInfo(int samples, float dt) {
+    if (samples > 0) {
+        samplesLabel->setText(QString::number(samples));
+        samplesLabel->setStyleSheet("QLabel { color: black; }");
+        
+        // Отображаем dt в микросекундах с единицами измерения
+        QString dtText = QString::number(dt, 'f', 1) + " ms";
+        dtLabel->setText(dtText);
+        dtLabel->setStyleSheet("QLabel { color: black; }");
+    } else {
+        samplesLabel->setText("No file");
+        samplesLabel->setStyleSheet("QLabel { color: gray; }");
+        
+        dtLabel->setText("No file");
+        dtLabel->setStyleSheet("QLabel { color: gray; }");
+    }
 }
 
 // Слоты для синхронизации

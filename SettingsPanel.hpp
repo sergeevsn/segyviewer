@@ -30,6 +30,9 @@ public:
     void setColorScheme(const QString& scheme);
     void setGain(float value);
     void setGridEnabled(bool enabled);
+    
+    // Методы для отображения информации о файле
+    void setFileInfo(int samples, float dt);
 
 signals:
     void settingsChanged(); // Сигнал при изменении любых настроек
@@ -56,6 +59,10 @@ private:
     
     // Виджет для включения/отключения сетки
     QCheckBox* gridCheckBox;
+    
+    // Виджеты для отображения информации о файле
+    QLabel* samplesLabel;
+    QLabel* dtLabel;
 };
 
 
