@@ -1,5 +1,0 @@
-/home/ssn/workdev/segyviewer/build/CMakeFiles/SegyViewer.dir
-/home/ssn/workdev/segyviewer/build/CMakeFiles/edit_cache.dir
-/home/ssn/workdev/segyviewer/build/CMakeFiles/rebuild_cache.dir
-/home/ssn/workdev/segyviewer/build/CMakeFiles/SegyViewer_autogen_timestamp_deps.dir
-/home/ssn/workdev/segyviewer/build/CMakeFiles/SegyViewer_autogen.dir
