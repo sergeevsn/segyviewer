@@ -2,6 +2,8 @@
 #include "SegyViewer.hpp"
 #include "SegyDataManager.hpp"
 #include "StatusPanel.hpp"
+#include "SettingsPanel.hpp"
+#include "TraceInfoPanel.hpp"
 #include <QMenuBar>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -12,6 +14,12 @@
 #include <QMenu>
 #include <QCoreApplication>
 #include <iostream>
+#include <QInputDialog>
+#include <QSlider>
+#include <QLabel>
+#include <QPushButton>
+#include <QDialog>
+#include <QHBoxLayout>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -23,10 +31,14 @@ MainWindow::MainWindow(QWidget *parent)
           scrollBar(new QScrollBar(Qt::Horizontal, this)),
     verticalScrollBar(new QScrollBar(Qt::Vertical, this)),
     navigationStep(10),
-    currentGain(1.0f)
+    currentGain(1.0f),
+    currentGamma(2.2f),
+    currentContrast(1.0f),
+    currentBrightness(0.0f),
+    currentPerceptualCorrection(false)
 {
     setWindowTitle("SEG-Y Viewer");
-    resize(1600, 800); // Увеличенный размер для лучшего отображения данных
+    resize(1600, 1000); // Увеличенный размер для лучшего отображения данных
 
     QWidget *central = new QWidget(this);
     
@@ -89,7 +101,34 @@ void MainWindow::createMenus() {
     fileMenu->addSeparator();
     fileMenu->addAction("Exit", qApp, &QCoreApplication::quit);
 
-    // Меню View убрано - настройки теперь в панели над графиком
+    // Меню View с продвинутыми настройками цветовых схем
+    QMenu* viewMenu = menuBar()->addMenu("&View");
+    
+    // Подменю для цветовых схем
+    QMenu* colorMenu = viewMenu->addMenu("Color Scheme Settings");
+    
+    // Gamma correction
+    QAction* gammaAction = new QAction("Gamma Correction...", this);
+    connect(gammaAction, &QAction::triggered, this, &MainWindow::openGammaDialog);
+    colorMenu->addAction(gammaAction);
+    
+    // Contrast and brightness
+    QAction* contrastAction = new QAction("Contrast & Brightness...", this);
+    connect(contrastAction, &QAction::triggered, this, &MainWindow::openContrastDialog);
+    colorMenu->addAction(contrastAction);
+    
+    // Perceptual correction
+    perceptualAction = new QAction("Perceptual Correction", this);
+    perceptualAction->setCheckable(true);
+    perceptualAction->setChecked(false);
+    connect(perceptualAction, &QAction::toggled, this, &MainWindow::togglePerceptualCorrection);
+    colorMenu->addAction(perceptualAction);
+    
+    // Reset all settings
+    colorMenu->addSeparator();
+    QAction* resetAction = new QAction("Reset All Settings", this);
+    connect(resetAction, &QAction::triggered, this, &MainWindow::resetColorSettings);
+    colorMenu->addAction(resetAction);
 }
 
 void MainWindow::setupScrollBar() {
@@ -269,7 +308,6 @@ void MainWindow::onSettingsChanged() {
     viewer->setColorScheme(settingsPanel->getColorScheme());
     viewer->setGain(settingsPanel->getGain());
     viewer->setGridEnabled(settingsPanel->getGridEnabled());
-
     
     // Устанавливаем фиксированный размер кэша (5000)
     dataManager->setCacheSize(5000);
@@ -339,5 +377,115 @@ void MainWindow::onSettingsChanged() {
     
     // Обновляем отображение
     viewer->update();
+}
+
+// Реализация методов для продвинутых настроек цветовых схем
+void MainWindow::openGammaDialog() {
+    bool ok;
+    float gamma = QInputDialog::getDouble(this, "Gamma Correction", 
+                                        "Enter gamma value (0.5 - 4.0):", 
+                                        currentGamma, 0.5, 4.0, 1, &ok);
+    if (ok) {
+        currentGamma = gamma;
+        viewer->setGamma(gamma);
+        viewer->update();
+    }
+}
+
+void MainWindow::openContrastDialog() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Contrast & Brightness");
+    dialog.setModal(true);
+    
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    
+    // Contrast slider
+    QHBoxLayout* contrastLayout = new QHBoxLayout();
+    QLabel* contrastLabel = new QLabel("Contrast:", &dialog);
+    QSlider* contrastSlider = new QSlider(Qt::Horizontal, &dialog);
+    contrastSlider->setRange(10, 300); // 0.1 - 3.0 * 100
+    contrastSlider->setValue(static_cast<int>(currentContrast * 100));
+    contrastLayout->addWidget(contrastLabel);
+    contrastLayout->addWidget(contrastSlider);
+    layout->addLayout(contrastLayout);
+    
+    // Brightness slider
+    QHBoxLayout* brightnessLayout = new QHBoxLayout();
+    QLabel* brightnessLabel = new QLabel("Brightness:", &dialog);
+    QSlider* brightnessSlider = new QSlider(Qt::Horizontal, &dialog);
+    brightnessSlider->setRange(-50, 50); // -0.5 - 0.5 * 100
+    brightnessSlider->setValue(static_cast<int>(currentBrightness * 100));
+    brightnessLayout->addWidget(brightnessLabel);
+    brightnessLayout->addWidget(brightnessSlider);
+    layout->addLayout(brightnessLayout);
+    
+    // Buttons
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    QPushButton* okButton = new QPushButton("OK", &dialog);
+    QPushButton* cancelButton = new QPushButton("Cancel", &dialog);
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+    layout->addLayout(buttonLayout);
+    
+    // Connect signals
+    connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+    
+    // Apply changes in real-time
+    connect(contrastSlider, &QSlider::valueChanged, [this, contrastSlider, brightnessSlider]() {
+        float contrast = contrastSlider->value() / 100.0f;
+        float brightness = brightnessSlider->value() / 100.0f;
+        currentContrast = contrast;
+        currentBrightness = brightness;
+        viewer->setContrast(contrast);
+        viewer->setBrightness(brightness);
+        viewer->update();
+    });
+    
+    connect(brightnessSlider, &QSlider::valueChanged, [this, contrastSlider, brightnessSlider]() {
+        float contrast = contrastSlider->value() / 100.0f;
+        float brightness = brightnessSlider->value() / 100.0f;
+        currentContrast = contrast;
+        currentBrightness = brightness;
+        viewer->setContrast(contrast);
+        viewer->setBrightness(brightness);
+        viewer->update();
+    });
+    
+    dialog.exec();
+}
+
+void MainWindow::togglePerceptualCorrection(bool enabled) {
+    currentPerceptualCorrection = enabled;
+    viewer->setPerceptualCorrection(enabled);
+    viewer->update();
+}
+
+void MainWindow::resetColorSettings() {
+    // Сбрасываем все настройки к значениям по умолчанию
+    currentGamma = 2.2f;
+    currentContrast = 1.0f;
+    currentBrightness = 0.0f;
+    currentPerceptualCorrection = false;
+    
+    // Применяем сброшенные настройки к viewer
+    viewer->setGamma(currentGamma);
+    viewer->setContrast(currentContrast);
+    viewer->setBrightness(currentBrightness);
+    viewer->setPerceptualCorrection(currentPerceptualCorrection);
+    
+    // Обновляем состояние чекбокса в меню
+    perceptualAction->setChecked(false);
+    
+    // Обновляем отображение
+    viewer->update();
+    
+    // Показываем уведомление пользователю
+    QMessageBox::information(this, "Settings Reset", 
+                           "All color scheme settings have been reset to default values:\n"
+                           "• Gamma: 2.2\n"
+                           "• Contrast: 1.0\n"
+                           "• Brightness: 0.0\n"
+                           "• Perceptual Correction: Off");
 }
 

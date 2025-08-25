@@ -21,7 +21,11 @@ SegyViewer::SegyViewer(QWidget* parent)
       colorMapValid(false),
       gain(1.0f),
       globalStatsComputed(false),
-      gridEnabled(false)  // По умолчанию сетка отключена
+      gridEnabled(false),  // По умолчанию сетка отключена
+      gamma(2.2f),         // По умолчанию стандартная гамма
+      contrast(1.0f),      // По умолчанию без изменения контрастности
+      brightness(0.0f),    // По умолчанию без изменения яркости
+      perceptualCorrection(false)  // По умолчанию перцептивная коррекция отключена
 {
     setMouseTracking(true);
 }
@@ -33,6 +37,30 @@ void SegyViewer::setDataManager(SegyDataManager* manager) {
 void SegyViewer::setColorScheme(const QString& scheme) {
     colorScheme = scheme;
     colorMapValid = false; // нужно пересчитать цветовую карту
+    update();
+}
+
+void SegyViewer::setGamma(float g) {
+    gamma = g;
+    colorMapValid = false;
+    update();
+}
+
+void SegyViewer::setContrast(float c) {
+    contrast = c;
+    colorMapValid = false;
+    update();
+}
+
+void SegyViewer::setBrightness(float b) {
+    brightness = b;
+    colorMapValid = false;
+    update();
+}
+
+void SegyViewer::setPerceptualCorrection(bool enabled) {
+    perceptualCorrection = enabled;
+    colorMapValid = false;
     update();
 }
 
@@ -119,8 +147,11 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     const int maxImageHeight = 2000; // Максимальная высота изображения
     int actualSamplesToRender = std::min(samplesToShow, maxImageHeight);
     
-    // Создаём QImage с ограниченным размером
-    QImage img(traceCount, actualSamplesToRender, QImage::Format_ARGB32);
+    // Суперсэмплинг для улучшения качества отрисовки
+    const int superSamplingFactor = 2; // Коэффициент суперсэмплинга (x2)
+    
+    // Создаём QImage с увеличенным размером для суперсэмплинга
+    QImage img(traceCount * superSamplingFactor, actualSamplesToRender * superSamplingFactor, QImage::Format_ARGB32);
     
     // Вычисляем шаг для пропуска сэмплов, если нужно
     double sampleStep = 1.0;
@@ -129,7 +160,7 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     }
     
     for (int y = 0; y < actualSamplesToRender; ++y) {
-        QRgb* line = reinterpret_cast<QRgb*>(img.scanLine(y));
+        // Заполняем строку с суперсэмплингом
         for (int x = 0; x < traceCount; ++x) {
             // Вычисляем индекс сэмпла с учетом шага
             int sampleIndex = startSampleIndex + static_cast<int>(y * sampleStep);
@@ -137,13 +168,26 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
                 sampleIndex = traces[x].size() - 1;
             }
             float amp = traces[x][sampleIndex];
-            line[x] = amplitudeToRgb(amp);
+            QRgb color = amplitudeToRgb(amp);
+            
+            // Заполняем пиксели с суперсэмплингом (x2)
+            for (int sy = 0; sy < superSamplingFactor; ++sy) {
+                for (int sx = 0; sx < superSamplingFactor; ++sx) {
+                    int superX = x * superSamplingFactor + sx;
+                    int superY = y * superSamplingFactor + sy;
+                    if (superX < img.width() && superY < img.height()) {
+                        img.setPixel(superX, superY, color);
+                    }
+                }
+            }
         }
     }
 
-    // Включаем сглаживание при масштабировании (как в matplotlib imshow)
+    // Включаем сглаживание при масштабировании для суперсэмплинга
     p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    p.drawImage(imageRect, img);
+    
+    // Рисуем изображение с суперсэмплингом - уменьшаем до нужного размера
+    p.drawImage(imageRect, img, QRect(0, 0, img.width(), img.height()));
     
     // Вычисляем шаги для подписей
     int traceStep = std::max(1, traceCount / (imageRect.width() / labelSpacing));
@@ -258,11 +302,17 @@ void SegyViewer::updateColorMap() {
         }
     }
 
-    // Заполняем LUT (256 цветов)
-    lut.resize(256);
-    for (int i = 0; i < 256; ++i) {
-        float norm = i / 255.0f;
-        QColor c = ColorSchemes::getColor(norm, colorScheme);
+    // Заполняем LUT (1024 цвета для лучшего качества)
+    const int colorMapSize = 1024;
+    lut.resize(colorMapSize);
+    
+    // Настраиваем глобальные параметры ColorSchemes
+    ColorSchemes::setCustomGamma(gamma);
+    ColorSchemes::enablePerceptualCorrection(perceptualCorrection);
+    
+    for (int i = 0; i < colorMapSize; ++i) {
+        float norm = i / static_cast<float>(colorMapSize - 1);
+        QColor c = ColorSchemes::getColorWithParams(norm, colorScheme, contrast, brightness, gamma);
         lut[i] = c.rgba();
     }
 
@@ -284,7 +334,8 @@ uint32_t SegyViewer::amplitudeToRgb(float amplitude) const {
     if (norm < 0.0f) norm = 0.0f;
     if (norm > 1.0f) norm = 1.0f;
 
-    int idx = static_cast<int>(norm * 255.0f);
+    int idx = static_cast<int>(norm * (lut.size() - 1));
+    if (idx >= lut.size()) idx = lut.size() - 1;
     return lut[idx];
 }
 

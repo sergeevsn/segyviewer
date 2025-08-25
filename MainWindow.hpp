@@ -25,6 +25,12 @@ private slots:
     void onSettingsChanged();
     void onScrollBarChanged(int value);
     void onVerticalScrollBarChanged(int value);
+    
+    // Новые слоты для продвинутых настроек цветовых схем
+    void openGammaDialog();
+    void openContrastDialog();
+    void togglePerceptualCorrection(bool enabled);
+    void resetColorSettings();
 
 private:
     void createMenus();
@@ -41,5 +47,14 @@ private:
     // Навигация
     int navigationStep;
     float currentGain; // Для сохранения значения gain
+    
+    // Продвинутые настройки цветовых схем
+    float currentGamma;
+    float currentContrast;
+    float currentBrightness;
+    bool currentPerceptualCorrection;
+    
+    // Ссылки на действия меню для обновления состояния
+    QAction* perceptualAction;
 };
 

@@ -60,7 +60,8 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QHBoxLayout* schemeLayout = new QHBoxLayout();
     QLabel* colorLabel = new QLabel("Color scheme:", this);
     colorCombo = new QComboBox(this);
-    colorCombo->addItems({"gray", "BWR", "seismic"});
+    colorCombo->addItems({"gray", "seismic", "BWR", "viridis", "red_blue", "phase", 
+                          "amplitude", "spectrum", "petrel_classic", "kingdom", "seisworks"});
     colorCombo->setCurrentText("gray");
     schemeLayout->addWidget(colorLabel);
     schemeLayout->addWidget(colorCombo);
