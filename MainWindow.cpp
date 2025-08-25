@@ -23,7 +23,7 @@ MainWindow::MainWindow(QWidget *parent)
           scrollBar(new QScrollBar(Qt::Horizontal, this)),
     verticalScrollBar(new QScrollBar(Qt::Vertical, this)),
     navigationStep(10),
-    currentGain(5.0f)
+    currentGain(1.0f)
 {
     setWindowTitle("SEG-Y Viewer");
     resize(1600, 800); // Увеличенный размер для лучшего отображения данных
@@ -131,8 +131,6 @@ void MainWindow::openAsTraces() {
     }
 
     viewer->setDataManager(dataManager);
-    viewer->setTracesPerPage(settingsPanel->getTracesPerPage());
-    viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
     viewer->setCurrentPage(0);
     viewer->setGain(currentGain); // Применяем gain сразу при загрузке
     viewer->setGridEnabled(settingsPanel->getGridEnabled()); // Применяем настройку сетки
@@ -149,9 +147,31 @@ void MainWindow::openAsTraces() {
     }
     settingsPanel->setFileInfo(totalSamples, dt);
     
+    // Автоматически устанавливаем time per page равным полному времени трассы
+    if (totalSamples > 0) {
+        float dt = dataManager->getSampleInterval(); // в микросекундах
+        float totalTimeMs = (totalSamples - 1) * dt; // общее время в миллисекундах (сэмплы от 0 до totalSamples-1)
+        int timePerPageMs = static_cast<int>(totalTimeMs);
+        
+        settingsPanel->setSamplesPerPage(timePerPageMs);
+        viewer->setSamplesPerPage(timePerPageMs);
+    }
+    
     // Настраиваем горизонтальный скролл-бар
     int totalTraces = dataManager->traceCount();
     int tracesPerPage = settingsPanel->getTracesPerPage();
+    
+    // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
+    if (tracesPerPage == 0) {
+        tracesPerPage = std::min(totalTraces, 5000);
+        
+        // Обновляем значение в spin box, чтобы показать реальное установленное значение
+        settingsPanel->setTracesPerPage(tracesPerPage);
+    }
+    
+    // Теперь устанавливаем вычисленное значение в viewer
+    viewer->setTracesPerPage(tracesPerPage);
+    
     int maxValue = std::max(0, totalTraces - tracesPerPage);
     
     scrollBar->setVisible(true);
@@ -162,25 +182,36 @@ void MainWindow::openAsTraces() {
     scrollBar->setSingleStep(10); // Фиксированный шаг навигации
     
     // Настраиваем вертикальный скролл-бар для сэмплов
-    int samplesPerPage = settingsPanel->getSamplesPerPage();
-    if (samplesPerPage > 0) {
-        // Получаем количество сэмплов в первой трассе для оценки
-        auto traces = dataManager->getTracesRange(0, 1);
-        if (!traces.empty() && !traces[0].empty()) {
-            int totalSamples = traces[0].size();
-            int maxSampleValue = std::max(0, totalSamples - samplesPerPage);
+    if (totalSamples > 0) {
+        // Получаем установленное значение time per page
+        int timePerPage = settingsPanel->getSamplesPerPage();
+        
+        // Конвертируем время в количество сэмплов для сравнения
+        float dt = dataManager->getSampleInterval(); // в микросекундах
+        int timeInSamples = static_cast<int>(timePerPage / dt);
+        
+        if (timeInSamples > 0 && timeInSamples < totalSamples) {
+            // Если time per page меньше полного времени, показываем скролл-бар
+            int maxSampleValue = std::max(0, totalSamples - timeInSamples);
             
             verticalScrollBar->setVisible(true);
             verticalScrollBar->setMinimum(0);
             verticalScrollBar->setMaximum(maxSampleValue);
             verticalScrollBar->setValue(0);
-            verticalScrollBar->setPageStep(samplesPerPage);
-            
-            // Сбрасываем начальный сэмпл в viewer
-            viewer->setStartSample(0);
+            verticalScrollBar->setPageStep(timeInSamples);
+        } else {
+            // Если показываем все время, скрываем скролл-бар
+            verticalScrollBar->setVisible(false);
+            verticalScrollBar->setMinimum(0);
+            verticalScrollBar->setMaximum(0);
+            verticalScrollBar->setValue(0);
+            verticalScrollBar->setPageStep(totalSamples);
         }
+        
+        // Сбрасываем начальный сэмпл в viewer
+        viewer->setStartSample(0);
     } else {
-        // Если samples per page = 0, скрываем вертикальный скролл-бар
+        // Если нет сэмплов, скрываем вертикальный скролл-бар
         verticalScrollBar->setVisible(false);
         viewer->setStartSample(0);
     }
@@ -222,7 +253,18 @@ MainWindow::~MainWindow() {
 
 void MainWindow::onSettingsChanged() {
     // Применяем новые настройки к viewer
-    viewer->setTracesPerPage(settingsPanel->getTracesPerPage());
+    int tracesPerPage = settingsPanel->getTracesPerPage();
+    
+    // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
+    if (dataManager && tracesPerPage == 0) {
+        int totalTraces = dataManager->traceCount();
+        tracesPerPage = std::min(totalTraces, 5000);
+        
+        // Обновляем значение в spin box, чтобы показать реальное установленное значение
+        settingsPanel->setTracesPerPage(tracesPerPage);
+    }
+    
+    viewer->setTracesPerPage(tracesPerPage);
     viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
     viewer->setColorScheme(settingsPanel->getColorScheme());
     viewer->setGain(settingsPanel->getGain());
@@ -239,6 +281,12 @@ void MainWindow::onSettingsChanged() {
     if (dataManager && dataManager->traceCount() > 0) {
         int totalTraces = dataManager->traceCount();
         int tracesPerPage = settingsPanel->getTracesPerPage();
+        
+        // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
+        if (tracesPerPage == 0) {
+            tracesPerPage = std::min(totalTraces, 5000);
+        }
+        
         int maxValue = std::max(0, totalTraces - tracesPerPage);
         
         scrollBar->setMaximum(maxValue);
@@ -254,11 +302,23 @@ void MainWindow::onSettingsChanged() {
     // Обновляем вертикальный скролл-бар для сэмплов
     if (dataManager && dataManager->traceCount() > 0) {
         int samplesPerPage = settingsPanel->getSamplesPerPage();
-        if (samplesPerPage > 0) {
-            // Получаем количество сэмплов в первой трассе для оценки
-            auto traces = dataManager->getTracesRange(0, 1);
-            if (!traces.empty() && !traces[0].empty()) {
-                int totalSamples = traces[0].size();
+        // Получаем количество сэмплов в первой трассе для оценки
+        auto traces = dataManager->getTracesRange(0, 1);
+        if (!traces.empty() && !traces[0].empty()) {
+            int totalSamples = traces[0].size();
+            
+            // Если samplesPerPage = 0, вычисляем количество сэмплов для полного времени
+            if (samplesPerPage == 0) {
+                float dt = dataManager->getSampleInterval(); // в микросекундах
+                int totalTimeMs = (totalSamples - 1) * dt; // общее время в миллисекундах (сэмплы от 0 до totalSamples-1)
+                samplesPerPage = totalTimeMs;
+                
+                // Обновляем значение в spin box, чтобы показать реальное установленное значение
+                settingsPanel->setSamplesPerPage(samplesPerPage);
+            }
+            
+            if (samplesPerPage > 0 && samplesPerPage < totalSamples) {
+                // Если samples per page меньше общего количества сэмплов, показываем скролл-бар
                 int maxSampleValue = std::max(0, totalSamples - samplesPerPage);
                 
                 verticalScrollBar->setVisible(true);
@@ -269,11 +329,11 @@ void MainWindow::onSettingsChanged() {
                 
                 // Сбрасываем начальный сэмпл в viewer
                 viewer->setStartSample(0);
+            } else {
+                // Если samples per page = 0 или >= totalSamples, скрываем вертикальный скролл-бар
+                verticalScrollBar->setVisible(false);
+                viewer->setStartSample(0);
             }
-        } else {
-            // Если samples per page = 0, скрываем вертикальный скролл-бар
-            verticalScrollBar->setVisible(false);
-            viewer->setStartSample(0);
         }
     }
     

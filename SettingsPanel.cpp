@@ -19,8 +19,9 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QHBoxLayout* tracesLayout = new QHBoxLayout();
     QLabel* tracesLabel = new QLabel("Traces per page:", this);
     tracesSpinBox = new QSpinBox(this);
-    tracesSpinBox->setRange(10, 5000);
+    tracesSpinBox->setRange(0, 5000);
     tracesSpinBox->setValue(1000);
+    tracesSpinBox->setSpecialValueText("Max"); // 0 означает "максимум трасс"
     tracesLayout->addWidget(tracesLabel);
     tracesLayout->addWidget(tracesSpinBox);
     displayLayout->addLayout(tracesLayout);
@@ -31,13 +32,20 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QGroupBox* samplesGroup = new QGroupBox("", this);
     QVBoxLayout* samplesLayout = new QVBoxLayout(samplesGroup);
     
-    // Samples Per Page
+    // Time Per Page
     QHBoxLayout* samplesControlLayout = new QHBoxLayout();
-    QLabel* samplesPerPageLabel = new QLabel("Samples per page:", this);
+    QLabel* samplesPerPageLabel = new QLabel("Time per page (ms):", this);
     samplesSpinBox = new QSpinBox(this);
     samplesSpinBox->setRange(0, 10000);
+    samplesSpinBox->setSingleStep(50);
     samplesSpinBox->setValue(0);
-    samplesSpinBox->setSpecialValueText("All"); // 0 означает "все сэмплы"
+    samplesSpinBox->setSpecialValueText("All"); // 0 означает "все время"
+    
+    // Устанавливаем минимальное значение 100 для предотвращения зависания
+    // (0 остается специальным значением "все время")
+    samplesSpinBox->setMinimum(0);
+    // Добавляем валидатор для предотвращения ввода значений меньше 100 (кроме 0)
+    connect(samplesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onSamplesPerPageValueChanged()));
     samplesControlLayout->addWidget(samplesPerPageLabel);
     samplesControlLayout->addWidget(samplesSpinBox);
     samplesLayout->addLayout(samplesControlLayout);
@@ -52,7 +60,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QHBoxLayout* schemeLayout = new QHBoxLayout();
     QLabel* colorLabel = new QLabel("Color scheme:", this);
     colorCombo = new QComboBox(this);
-    colorCombo->addItems({"gray", "PuOr", "seismic"});
+    colorCombo->addItems({"gray", "BWR", "seismic"});
     colorCombo->setCurrentText("gray");
     schemeLayout->addWidget(colorLabel);
     schemeLayout->addWidget(colorCombo);
@@ -71,7 +79,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     gainSpinBox->setRange(0.1, 50.0);
     gainSpinBox->setSingleStep(0.1);
     gainSpinBox->setDecimals(1);
-    gainSpinBox->setValue(5.0);
+    gainSpinBox->setValue(1.0);
     gainLayout->addWidget(gainLabel);
     gainLayout->addWidget(gainSpinBox);
     imageLayout->addLayout(gainLayout);
@@ -86,7 +94,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QHBoxLayout* gridLayout2 = new QHBoxLayout();
     QLabel* gridLabel = new QLabel("Grid:", this);
     gridCheckBox = new QCheckBox(this);
-    gridCheckBox->setChecked(true); // По умолчанию сетка включена
+    gridCheckBox->setChecked(false); // По умолчанию сетка отключена
     gridLayout2->addWidget(gridLabel);
     gridLayout2->addWidget(gridCheckBox);
     gridLayout->addLayout(gridLayout2);
@@ -124,12 +132,20 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     mainLayout->addWidget(fileInfoGroup);
     
+    // Создаем таймер для дебаунсинга samples per page
+    samplesDebounceTimer = new QTimer(this);
+    samplesDebounceTimer->setSingleShot(true);
+    samplesDebounceTimer->setInterval(500); // 500ms задержка
+    
     // Подключаем сигналы
     connect(tracesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTracesPerPageChanged()));
     connect(samplesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onSamplesPerPageChanged()));
     connect(colorCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(onColorSchemeChanged()));
     connect(gainSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onGainChanged()));
     connect(gridCheckBox, SIGNAL(toggled(bool)), this, SLOT(onGridEnabledChanged()));
+    
+    // Подключаем таймер дебаунсинга
+    connect(samplesDebounceTimer, SIGNAL(timeout()), this, SLOT(onSamplesPerPageDebounced()));
 }
 
 // Геттеры
@@ -197,7 +213,25 @@ void SettingsPanel::onTracesPerPageChanged() {
     emit settingsChanged();
 }
 
+void SettingsPanel::onSamplesPerPageValueChanged() {
+    int value = samplesSpinBox->value();
+    
+    // Если пользователь ввел значение меньше 100 (но не 0), устанавливаем 100
+    if (value > 0 && value < 100) {
+        samplesSpinBox->setValue(100);
+        return; // Не запускаем таймер дебаунсинга, так как значение изменилось программно
+    }
+    
+    // Запускаем таймер дебаунсинга только если значение корректное
+    samplesDebounceTimer->start();
+}
+
 void SettingsPanel::onSamplesPerPageChanged() {
+    // Этот слот теперь не используется напрямую, но оставляем для совместимости
+}
+
+void SettingsPanel::onSamplesPerPageDebounced() {
+    // Отправляем сигнал только после окончания ввода
     emit settingsChanged();
 }
 

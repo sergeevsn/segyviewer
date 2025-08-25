@@ -22,5 +22,5 @@ private:
     // Отдельные схемы
     static QColor grayscale(float v);
     static QColor seismic(float v);
-    static QColor puOr(float v);
+    static QColor bwr(float v);
 };

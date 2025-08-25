@@ -46,16 +46,16 @@ QColor ColorSchemes::seismic(float v) {
     }
 }
 
-QColor ColorSchemes::puOr(float v) {
+QColor ColorSchemes::bwr(float v) {
     v = normalizeValue(v);
 
-    // Простая интерполяция по 5 ключевым цветам (фиолет->белый->оранж)
+    // Blue-White-Red colormap с 5 ключевыми цветами
     std::vector<QColor> palette = {
-        QColor(127, 0, 127),    // темно-фиолетовый
-        QColor(191, 95, 168),   // светлее фиолет
-        QColor(255, 255, 255),  // белый центр
-        QColor(255, 160, 0),    // светлый оранж
-        QColor(127, 60, 0)      // темно-оранжевый
+        QColor(0, 0, 128),      // темно-синий (0.0)
+        QColor(0, 96, 212),     // синий (0.25)
+        QColor(255, 255, 255),  // белый центр (0.5)
+        QColor(212, 96, 0),     // красный (0.75)
+        QColor(128, 0, 0)       // темно-красный (1.0)
     };
 
     float segmentSize = 1.0f / (palette.size() - 1);
@@ -74,8 +74,8 @@ QColor ColorSchemes::getColor(float normalizedValue, const QString& schemeName) 
         return grayscale(normalizedValue);
     } else if (schemeName == "seismic") {
         return seismic(normalizedValue);
-    } else if (schemeName == "PuOr") {
-        return puOr(normalizedValue);
+    } else if (schemeName == "BWR") {
+        return bwr(normalizedValue);
     } else {
         // По умолчанию gray
         return grayscale(normalizedValue);
@@ -83,7 +83,7 @@ QColor ColorSchemes::getColor(float normalizedValue, const QString& schemeName) 
 }
 
 QStringList ColorSchemes::getAvailableSchemes() {
-    return {"gray", "seismic", "PuOr"};
+    return {"gray", "seismic", "BWR"};
 }
 
 bool ColorSchemes::hasScheme(const QString& schemeName) {

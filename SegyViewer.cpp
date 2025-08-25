@@ -19,9 +19,9 @@ SegyViewer::SegyViewer(QWidget* parent)
       minAmplitude(0.0f),
       maxAmplitude(1.0f),
       colorMapValid(false),
-      gain(5.0f),
+      gain(1.0f),
       globalStatsComputed(false),
-      gridEnabled(true)  // По умолчанию сетка включена
+      gridEnabled(false)  // По умолчанию сетка отключена
 {
     setMouseTracking(true);
 }
@@ -87,7 +87,21 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
         maxSamples = std::max(maxSamples, static_cast<int>(tr.size()));
     if (maxSamples == 0) return;
 
-    int samplesToShow = (samplesPerPage > 0) ? std::min(samplesPerPage, maxSamples) : maxSamples;
+    // samplesPerPage теперь интерпретируется как время в миллисекундах
+    int samplesToShow;
+    if (samplesPerPage > 0) {
+        // Конвертируем время в количество сэмплов
+        float dt = dataManager->getSampleInterval(); // в микросекундах
+        int timeInSamples = static_cast<int>(samplesPerPage / dt);
+        samplesToShow = std::min(timeInSamples, maxSamples);
+    } else {
+        samplesToShow = maxSamples; // 0 означает "все время"
+    }
+    
+    // Предотвращаем зависание при очень маленьких значениях - минимум 100 сэмплов
+    if (samplesToShow > 0 && samplesToShow < 100) {
+        samplesToShow = std::min(100, maxSamples);
+    }
 
     // Определяем размеры для осей - асимметричные отступы
     const int leftMargin = 80;   // Отступ слева для подписей времени
@@ -101,12 +115,28 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
                    width() - leftMargin - rightMargin, 
                    height() - topMargin - bottomMargin);
     
-    // Создаём QImage и сразу заполняем его данными
-    QImage img(traceCount, samplesToShow, QImage::Format_ARGB32);
-    for (int y = 0; y < samplesToShow; ++y) {
+    // Ограничиваем размер изображения для производительности
+    const int maxImageHeight = 2000; // Максимальная высота изображения
+    int actualSamplesToRender = std::min(samplesToShow, maxImageHeight);
+    
+    // Создаём QImage с ограниченным размером
+    QImage img(traceCount, actualSamplesToRender, QImage::Format_ARGB32);
+    
+    // Вычисляем шаг для пропуска сэмплов, если нужно
+    double sampleStep = 1.0;
+    if (samplesToShow > maxImageHeight) {
+        sampleStep = static_cast<double>(samplesToShow) / maxImageHeight;
+    }
+    
+    for (int y = 0; y < actualSamplesToRender; ++y) {
         QRgb* line = reinterpret_cast<QRgb*>(img.scanLine(y));
         for (int x = 0; x < traceCount; ++x) {
-            float amp = traces[x][y + startSampleIndex];
+            // Вычисляем индекс сэмпла с учетом шага
+            int sampleIndex = startSampleIndex + static_cast<int>(y * sampleStep);
+            if (sampleIndex >= static_cast<int>(traces[x].size())) {
+                sampleIndex = traces[x].size() - 1;
+            }
+            float amp = traces[x][sampleIndex];
             line[x] = amplitudeToRgb(amp);
         }
     }
@@ -120,7 +150,7 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     
     // Вычисляем оптимальный шаг времени кратный 250мс
     float dt = dataManager->getSampleInterval(); // в микросекундах
-    float totalTimeMs = samplesToShow * dt; // общее время в миллисекундах
+    float totalTimeMs = (samplesToShow - 1) * dt; // общее время в миллисекундах (сэмплы от 0 до samplesToShow-1)
     
     // Вычисляем оптимальный шаг времени в миллисекундах
     int timeStepMs = calculateOptimalTimeStep(totalTimeMs, imageRect.height(), labelSpacing);
@@ -131,7 +161,7 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     
     // Рисуем сетку только если она включена
     if (gridEnabled) {
-        p.setPen(QPen(Qt::lightGray, 1, Qt::DotLine)); // Светло-серая сетка
+        p.setPen(QPen(Qt::black, 1, Qt::DotLine)); // Тонкая черная сетка
         
         // Вертикальные линии сетки (трассы)
         for (int i = 0; i < traceCount; i += traceStep) {
@@ -283,7 +313,16 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     
     if (maxSamples == 0) return;
 
-    int samplesToShow = (samplesPerPage > 0) ? std::min(samplesPerPage, maxSamples) : maxSamples;
+    // samplesPerPage теперь интерпретируется как время в миллисекундах
+    int samplesToShow;
+    if (samplesPerPage > 0) {
+        // Конвертируем время в количество сэмплов
+        float dt = dataManager->getSampleInterval(); // в микросекундах
+        int timeInSamples = static_cast<int>(samplesPerPage / dt);
+        samplesToShow = std::min(timeInSamples, maxSamples);
+    } else {
+        samplesToShow = maxSamples; // 0 означает "все время"
+    }
 
     double pixelWidth = static_cast<double>(width) / traceCount;
     double pixelHeight = static_cast<double>(height) / samplesToShow;

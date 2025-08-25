@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QGroupBox>
+#include <QTimer>
 
 struct ViewerSettings;
 
@@ -40,6 +41,8 @@ signals:
 private slots:
     void onTracesPerPageChanged();
     void onSamplesPerPageChanged();
+    void onSamplesPerPageValueChanged();
+    void onSamplesPerPageDebounced();
     void onColorSchemeChanged();
     void onGainChanged();
     void onGridEnabledChanged();
@@ -48,7 +51,7 @@ private:
     // Виджеты для traces per page
     QSpinBox* tracesSpinBox;
     
-    // Виджеты для samples per page
+    // Виджеты для time per page
     QSpinBox* samplesSpinBox;
     
     // Виджет для color scheme
@@ -63,6 +66,9 @@ private:
     // Виджеты для отображения информации о файле
     QLabel* samplesLabel;
     QLabel* dtLabel;
+    
+    // Таймер для дебаунсинга изменений samples per page
+    QTimer* samplesDebounceTimer;
 };
 
 
