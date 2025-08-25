@@ -35,7 +35,10 @@ MainWindow::MainWindow(QWidget *parent)
     currentGamma(2.2f),
     currentContrast(1.0f),
     currentBrightness(0.0f),
-    currentPerceptualCorrection(false)
+    currentPerceptualCorrection(false),
+    perceptualAction(nullptr),
+    contrastSlider(nullptr),
+    brightnessSlider(nullptr)
 {
     setWindowTitle("SEG-Y Viewer");
     resize(1600, 1000); // Увеличенный размер для лучшего отображения данных
@@ -432,25 +435,8 @@ void MainWindow::openContrastDialog() {
     connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
     
     // Apply changes in real-time
-    connect(contrastSlider, &QSlider::valueChanged, [this, contrastSlider, brightnessSlider]() {
-        float contrast = contrastSlider->value() / 100.0f;
-        float brightness = brightnessSlider->value() / 100.0f;
-        currentContrast = contrast;
-        currentBrightness = brightness;
-        viewer->setContrast(contrast);
-        viewer->setBrightness(brightness);
-        viewer->update();
-    });
-    
-    connect(brightnessSlider, &QSlider::valueChanged, [this, contrastSlider, brightnessSlider]() {
-        float contrast = contrastSlider->value() / 100.0f;
-        float brightness = brightnessSlider->value() / 100.0f;
-        currentContrast = contrast;
-        currentBrightness = brightness;
-        viewer->setContrast(contrast);
-        viewer->setBrightness(brightness);
-        viewer->update();
-    });
+    connect(contrastSlider, &QSlider::valueChanged, this, &MainWindow::onContrastSliderChanged);
+    connect(brightnessSlider, &QSlider::valueChanged, this, &MainWindow::onBrightnessSliderChanged);
     
     dialog.exec();
 }
@@ -487,5 +473,19 @@ void MainWindow::resetColorSettings() {
                            "• Contrast: 1.0\n"
                            "• Brightness: 0.0\n"
                            "• Perceptual Correction: Off");
+}
+
+void MainWindow::onContrastSliderChanged(int value) {
+    float contrast = value / 100.0f;
+    currentContrast = contrast;
+    viewer->setContrast(contrast);
+    viewer->update();
+}
+
+void MainWindow::onBrightnessSliderChanged(int value) {
+    float brightness = value / 100.0f;
+    currentBrightness = brightness;
+    viewer->setBrightness(brightness);
+    viewer->update();
 }
 

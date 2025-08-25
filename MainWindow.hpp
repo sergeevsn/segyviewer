@@ -31,6 +31,10 @@ private slots:
     void openContrastDialog();
     void togglePerceptualCorrection(bool enabled);
     void resetColorSettings();
+    
+    // Слоты для обработки изменений слайдеров
+    void onContrastSliderChanged(int value);
+    void onBrightnessSliderChanged(int value);
 
 private:
     void createMenus();
@@ -56,5 +60,9 @@ private:
     
     // Ссылки на действия меню для обновления состояния
     QAction* perceptualAction;
+    
+    // Ссылки на слайдеры для обновления настроек
+    QSlider* contrastSlider;
+    QSlider* brightnessSlider;
 };
 
