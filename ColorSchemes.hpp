@@ -33,7 +33,7 @@ public:
     // Основные методы
     static QColor getColor(float normalizedValue, const QString& schemeName);
     static QColor getColorWithParams(float normalizedValue, const QString& schemeName, 
-                                   float contrast = 1.0f, float brightness = 0.0f, float gamma = 2.2f);
+                                   float contrast = 1.0f, float brightness = 0.0f, float gamma = 1.0f);
     static std::vector<QColor> getColorPalette(const QString& schemeName, int numColors);
     static QStringList getAvailableSchemes();
     static bool hasScheme(const QString& schemeName);
@@ -59,7 +59,7 @@ public:
     
 private:
     // Улучшенные базовые методы
-    static QColor interpolateColor(const QColor& c1, const QColor& c2, float t, float gamma = 2.2f);
+    static QColor interpolateColor(const QColor& c1, const QColor& c2, float t, float gamma = 1.0f);
     static QColor interpolateColorLAB(const QColor& c1, const QColor& c2, float t);
     
     // Перцептивная коррекция

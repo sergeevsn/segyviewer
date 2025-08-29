@@ -22,12 +22,32 @@ SegyViewer::SegyViewer(QWidget* parent)
       gain(1.0f),
       globalStatsComputed(false),
       gridEnabled(false),  // По умолчанию сетка отключена
-      gamma(2.2f),         // По умолчанию стандартная гамма
+      gamma(1.0f),         // По умолчанию стандартная гамма
       contrast(1.0f),      // По умолчанию без изменения контрастности
       brightness(0.0f),    // По умолчанию без изменения яркости
-      perceptualCorrection(false)  // По умолчанию перцептивная коррекция отключена
+      perceptualCorrection(false),  // По умолчанию перцептивная коррекция отключена
+      isZooming(false),
+      hasZoomSelection(false),
+      originalStartTrace(0),
+      originalStartSample(0),
+      originalTracesPerPage(1000),
+      originalSamplesPerPage(0),
+      isZoomed(false),
+      zoomUpdateTimer(new QTimer(this)),
+      percentilesComputed(false),
+      effectiveMinAmplitude(0.0f),
+      effectiveMaxAmplitude(1.0f)
 {
     setMouseTracking(true);
+    setAttribute(Qt::WA_OpaquePaintEvent, false); // Отключаем оптимизацию перерисовки
+    
+    // Настраиваем таймер для обновления зума
+    zoomUpdateTimer->setInterval(16); // ~60 FPS
+    connect(zoomUpdateTimer, &QTimer::timeout, this, [this]() {
+        if (isZooming) {
+            update();
+        }
+    });
 }
 
 void SegyViewer::setDataManager(SegyDataManager* manager) {
@@ -147,11 +167,8 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     const int maxImageHeight = 2000; // Максимальная высота изображения
     int actualSamplesToRender = std::min(samplesToShow, maxImageHeight);
     
-    // Суперсэмплинг для улучшения качества отрисовки
-    const int superSamplingFactor = 2; // Коэффициент суперсэмплинга (x2)
-    
-    // Создаём QImage с увеличенным размером для суперсэмплинга
-    QImage img(traceCount * superSamplingFactor, actualSamplesToRender * superSamplingFactor, QImage::Format_ARGB32);
+    // Создаём QImage в нужном размере без суперсэмплинга
+    QImage img(traceCount, actualSamplesToRender, QImage::Format_ARGB32);
     
     // Вычисляем шаг для пропуска сэмплов, если нужно
     double sampleStep = 1.0;
@@ -170,23 +187,12 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
             float amp = traces[x][sampleIndex];
             QRgb color = amplitudeToRgb(amp);
             
-            // Заполняем пиксели с суперсэмплингом (x2)
-            for (int sy = 0; sy < superSamplingFactor; ++sy) {
-                for (int sx = 0; sx < superSamplingFactor; ++sx) {
-                    int superX = x * superSamplingFactor + sx;
-                    int superY = y * superSamplingFactor + sy;
-                    if (superX < img.width() && superY < img.height()) {
-                        img.setPixel(superX, superY, color);
-                    }
-                }
-            }
+            // Заполняем пиксель напрямую без суперсэмплинга
+            img.setPixel(x, y, color);
         }
     }
 
-    // Включаем сглаживание при масштабировании для суперсэмплинга
-    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    
-    // Рисуем изображение с суперсэмплингом - уменьшаем до нужного размера
+    // Рисуем изображение напрямую без суперсэмплинга
     p.drawImage(imageRect, img, QRect(0, 0, img.width(), img.height()));
     
     // Вычисляем шаги для подписей
@@ -274,6 +280,9 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     p.rotate(-90);
     p.drawText(QRect(-50, -10, 100, 20), Qt::AlignCenter, "Time (ms)"); // Добавляем единицы измерения
     p.restore();
+    
+    // Рисуем прямоугольник выделения для зума
+    drawSelectionRect(p);
 }
 
 void SegyViewer::updateColorMap() {
@@ -301,6 +310,10 @@ void SegyViewer::updateColorMap() {
             globalStatsComputed = true;
         }
     }
+    
+    // Вычисляем перцентили и эффективные границы
+    computePercentiles();
+    updateEffectiveAmplitudeRange();
 
     // Заполняем LUT (1024 цвета для лучшего качества)
     const int colorMapSize = 1024;
@@ -319,18 +332,80 @@ void SegyViewer::updateColorMap() {
     colorMapValid = true;
 }
 
+void SegyViewer::computePercentiles() {
+    if (!dataManager || percentilesComputed) return;
+    
+    // Получаем все амплитуды для вычисления перцентилей
+    auto traces = dataManager->getTracesRange(0, 1000); // Используем первые 1000 трасс для статистики
+    if (traces.empty()) return;
+    
+    std::vector<float> allAmplitudes;
+    allAmplitudes.reserve(1000 * 1000); // Предварительно выделяем память
+    
+    for (const auto& trace : traces) {
+        for (float amplitude : trace) {
+            if (std::isfinite(amplitude)) {
+                allAmplitudes.push_back(amplitude);
+            }
+        }
+    }
+    
+    if (allAmplitudes.empty()) return;
+    
+    // Сортируем амплитуды для вычисления перцентилей
+    std::sort(allAmplitudes.begin(), allAmplitudes.end());
+    
+    // Вычисляем перцентили от 0 до 100 с шагом 0.1
+    amplitudePercentiles.resize(1001); // 0.0, 0.1, 0.2, ..., 100.0
+    for (int i = 0; i <= 1000; ++i) {
+        float percentile = i / 10.0f; // 0.0, 0.1, 0.2, ..., 100.0
+        int index = static_cast<int>((percentile / 100.0f) * (allAmplitudes.size() - 1));
+        if (index >= allAmplitudes.size()) index = allAmplitudes.size() - 1;
+        amplitudePercentiles[i] = allAmplitudes[index];
+    }
+    
+    percentilesComputed = true;
+}
+
+void SegyViewer::updateEffectiveAmplitudeRange() {
+    if (!percentilesComputed) {
+        computePercentiles();
+    }
+    
+    if (!percentilesComputed) return;
+    
+    // Применяем формулу: gain = [gain - 1.0, 101 - gain]
+    float lowerPercentile = std::max(0.0f, gain - 1.0f);
+    float upperPercentile = std::min(100.0f, 101.0f - gain);
+    
+    // Преобразуем проценты в индексы (0.1% = 1, 1.0% = 10, 99.0% = 990)
+    int lowerIndex = static_cast<int>(lowerPercentile * 10.0f);
+    int upperIndex = static_cast<int>(upperPercentile * 10.0f);
+    
+    // Ограничиваем индексы
+    lowerIndex = std::max(0, std::min(lowerIndex, 1000));
+    upperIndex = std::max(lowerIndex, std::min(upperIndex, 1000));
+    
+    // Получаем эффективные границы амплитуд
+    effectiveMinAmplitude = amplitudePercentiles[lowerIndex];
+    effectiveMaxAmplitude = amplitudePercentiles[upperIndex];
+    
+    // Защита от одинаковых значений
+    if (std::abs(effectiveMaxAmplitude - effectiveMinAmplitude) < 1e-6) {
+        effectiveMaxAmplitude = effectiveMinAmplitude + 1.0f;
+    }
+}
+
 uint32_t SegyViewer::amplitudeToRgb(float amplitude) const {
     if (!std::isfinite(amplitude)) {
         return qRgba(128, 128, 128, 255); // серый для NaN
     }
 
-    float range = maxAmplitude - minAmplitude;
-    float center = 0.5f * (maxAmplitude + minAmplitude);
-    float effectiveRange = range / gain;
-    float minEff = center - effectiveRange * 0.5f;
-    float maxEff = center + effectiveRange * 0.5f;
-
-    float norm = (amplitude - minEff) / effectiveRange;
+    // Используем эффективные границы, основанные на перцентилях
+    float range = effectiveMaxAmplitude - effectiveMinAmplitude;
+    if (range < 1e-6) range = 1.0f; // Защита от деления на ноль
+    
+    float norm = (amplitude - effectiveMinAmplitude) / range;
     if (norm < 0.0f) norm = 0.0f;
     if (norm > 1.0f) norm = 1.0f;
 
@@ -341,6 +416,14 @@ uint32_t SegyViewer::amplitudeToRgb(float amplitude) const {
 
 void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     if (!dataManager) return;
+
+    // Если происходит выделение области для зума, обновляем конечную точку
+    if (isZooming) {
+        zoomEnd = event->pos();
+        update();
+        repaint(); // Принудительная перерисовка
+        return;
+    }
 
     auto traces = dataManager->getTracesRange(startTraceIndex, tracesPerPage);
     if (traces.empty()) return;
@@ -418,4 +501,254 @@ int SegyViewer::calculateOptimalTimeStep(float totalTimeMs, int height, int labe
     
     // Возвращаем шаг в миллисекундах, а не в сэмплах
     return roundedStepMs;
+}
+
+void SegyViewer::mousePressEvent(QMouseEvent* event) {
+    if (!dataManager) return;
+
+    if (event->button() == Qt::LeftButton) {
+        // Начинаем выделение области для зума
+        isZooming = true;
+        zoomStart = event->pos();
+        zoomEnd = event->pos();
+        hasZoomSelection = false;
+        
+        // Немедленная перерисовка для показа начальной точки
+        update();
+        
+        // Принудительная перерисовка для мгновенного отображения
+        repaint();
+        
+        // Устанавливаем флаг для отслеживания мыши
+        setMouseTracking(true);
+        
+        // Запускаем таймер для плавного обновления
+        zoomUpdateTimer->start();
+    } else if (event->button() == Qt::RightButton) {
+        // Правый клик - сброс зума
+        resetZoom();
+    }
+}
+
+void SegyViewer::mouseReleaseEvent(QMouseEvent* event) {
+    if (!dataManager || !isZooming) return;
+
+    if (event->button() == Qt::LeftButton) {
+        isZooming = false;
+        zoomEnd = event->pos();
+        
+        // Проверяем, что выделена достаточно большая область
+        QRect selectionRect = QRect(zoomStart, zoomEnd).normalized();
+        if (selectionRect.width() > 10 && selectionRect.height() > 10) {
+            hasZoomSelection = true;
+            updateZoomFromSelection();
+        }
+        
+        // Отключаем отслеживание мыши после завершения выделения
+        setMouseTracking(false);
+        
+        // Останавливаем таймер
+        zoomUpdateTimer->stop();
+        
+        update();
+    }
+}
+
+void SegyViewer::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        // Двойной клик левой кнопкой - сброс зума
+        resetZoom();
+    }
+}
+
+void SegyViewer::drawSelectionRect(QPainter& painter) {
+    if (!isZooming && !hasZoomSelection) return;
+    
+    QRect selectionRect = QRect(zoomStart, zoomEnd).normalized();
+    if (selectionRect.width() < 2 || selectionRect.height() < 2) return;
+    
+    // Рисуем прямоугольник выделения
+    painter.setPen(QPen(Qt::blue, 2, Qt::DashLine));
+    painter.setBrush(QBrush(QColor(0, 0, 255, 30))); // Полупрозрачный синий
+    painter.drawRect(selectionRect);
+}
+
+void SegyViewer::updateZoomFromSelection() {
+    if (!dataManager || !hasZoomSelection) return;
+    
+    // Сохраняем текущее состояние перед зумом
+    if (!isZoomed) {
+        originalStartTrace = startTraceIndex;
+        originalStartSample = startSampleIndex;
+        originalTracesPerPage = tracesPerPage;
+        originalSamplesPerPage = samplesPerPage;
+        isZoomed = true;
+    }
+    
+    // Учитываем отступы для осей
+    const int leftMargin = 80;
+    const int bottomMargin = 80;
+    const int rightMargin = 20;
+    const int topMargin = 20;
+    int width = this->width() - leftMargin - rightMargin;
+    int height = this->height() - topMargin - bottomMargin;
+    
+    if (width <= 0 || height <= 0) return;
+    
+    // Нормализуем прямоугольник выделения
+    QRect selectionRect = QRect(zoomStart, zoomEnd).normalized();
+    
+    // Корректируем координаты с учетом отступов
+    QPoint adjustedStart = selectionRect.topLeft() - QPoint(leftMargin, topMargin);
+    QPoint adjustedEnd = selectionRect.bottomRight() - QPoint(leftMargin, topMargin);
+    
+    // Ограничиваем координаты областью отображения
+    adjustedStart.setX(std::max(0, std::min(adjustedStart.x(), width)));
+    adjustedStart.setY(std::max(0, std::min(adjustedStart.y(), height)));
+    adjustedEnd.setX(std::max(0, std::min(adjustedEnd.x(), width)));
+    adjustedEnd.setY(std::max(0, std::min(adjustedEnd.y(), height)));
+    
+    // Получаем текущие данные
+    auto traces = dataManager->getTracesRange(startTraceIndex, tracesPerPage);
+    if (traces.empty()) return;
+    
+    int traceCount = traces.size();
+    int maxSamples = 0;
+    for (const auto& trace : traces) {
+        maxSamples = std::max(maxSamples, static_cast<int>(trace.size()));
+    }
+    
+    if (maxSamples == 0) return;
+    
+    // Вычисляем текущие масштабы
+    double pixelWidth = static_cast<double>(width) / traceCount;
+    double pixelHeight = static_cast<double>(height) / maxSamples;
+    
+    // Вычисляем новые границы
+    int newStartTrace = static_cast<int>(adjustedStart.x() / pixelWidth);
+    int newEndTrace = static_cast<int>(adjustedEnd.x() / pixelWidth);
+    int newStartSample = static_cast<int>(adjustedStart.y() / pixelHeight);
+    int newEndSample = static_cast<int>(adjustedEnd.y() / pixelHeight);
+    
+    // Ограничиваем границы
+    newStartTrace = std::max(0, std::min(newStartTrace, traceCount - 1));
+    newEndTrace = std::max(newStartTrace + 1, std::min(newEndTrace, traceCount));
+    newStartSample = std::max(0, std::min(newStartSample, maxSamples - 1));
+    newEndSample = std::max(newStartSample + 1, std::min(newEndSample, maxSamples));
+    
+    // Применяем зум
+    int newTracesPerPage = newEndTrace - newStartTrace;
+    int newSamplesPerPage = newEndSample - newStartSample;
+    
+    // Обновляем параметры отображения
+    startTraceIndex += newStartTrace;
+    startSampleIndex += newStartSample;
+    tracesPerPage = newTracesPerPage;
+    samplesPerPage = newSamplesPerPage;
+    
+    // Сбрасываем выделение
+    hasZoomSelection = false;
+    isZooming = false;
+    
+    // Обновляем отображение
+    colorMapValid = false;
+    update();
+    
+    // Уведомляем об изменении зума
+    emit zoomChanged();
+}
+
+void SegyViewer::resetZoom() {
+    if (!isZoomed) return;
+    
+    // Восстанавливаем исходное состояние
+    startTraceIndex = originalStartTrace;
+    startSampleIndex = originalStartSample;
+    tracesPerPage = originalTracesPerPage;
+    samplesPerPage = originalSamplesPerPage;
+    
+    // Сбрасываем состояние зума
+    isZoomed = false;
+    isZooming = false;
+    hasZoomSelection = false;
+    
+    // Останавливаем таймер
+    zoomUpdateTimer->stop();
+    
+    // Обновляем отображение
+    colorMapValid = false;
+    update();
+    
+    // Уведомляем об изменении зума
+    emit zoomChanged();
+}
+
+void SegyViewer::resetZoomTimeOnly() {
+    if (!isZoomed) return;
+    
+    // Восстанавливаем только параметры времени
+    startSampleIndex = originalStartSample;
+    samplesPerPage = originalSamplesPerPage;
+    
+    // Обновляем отображение
+    colorMapValid = false;
+    update();
+    
+    // Уведомляем об изменении зума
+    emit zoomChanged();
+}
+
+void SegyViewer::resetZoomTracesOnly() {
+    if (!isZoomed) return;
+    
+    // Восстанавливаем только параметры трасс
+    startTraceIndex = originalStartTrace;
+    tracesPerPage = originalTracesPerPage;
+    
+    // Обновляем отображение
+    colorMapValid = false;
+    update();
+    
+    // Уведомляем об изменении зума
+    emit zoomChanged();
+}
+
+void SegyViewer::zoomToRegion(int startTrace, int endTrace, int startSample, int endSample) {
+    if (!dataManager) return;
+    
+    // Сохраняем текущее состояние перед зумом
+    if (!isZoomed) {
+        originalStartTrace = startTraceIndex;
+        originalStartSample = startSampleIndex;
+        originalTracesPerPage = tracesPerPage;
+        originalSamplesPerPage = samplesPerPage;
+        isZoomed = true;
+    }
+    
+    // Применяем новый зум
+    startTraceIndex = startTrace;
+    startSampleIndex = startSample;
+    tracesPerPage = endTrace - startTrace;
+    samplesPerPage = endSample - startSample;
+    
+    // Сбрасываем выделение
+    hasZoomSelection = false;
+    isZooming = false;
+    
+    // Обновляем отображение
+    colorMapValid = false;
+    update();
+    
+    // Уведомляем об изменении зума
+    emit zoomChanged();
+}
+
+QString SegyViewer::getZoomHelpText() const {
+    return QString(
+        "Zoom Controls:\n"
+        "• Left mouse button + drag: Select area to zoom\n"
+        "• Right mouse button: Reset zoom\n"
+        "• Double left click: Reset zoom\n"
+        "• Menu: View → Reset Zoom"
+    );
 }

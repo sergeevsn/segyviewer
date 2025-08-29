@@ -20,6 +20,7 @@
 #include <QPushButton>
 #include <QDialog>
 #include <QHBoxLayout>
+#include <QFileInfo>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -32,13 +33,15 @@ MainWindow::MainWindow(QWidget *parent)
     verticalScrollBar(new QScrollBar(Qt::Vertical, this)),
     navigationStep(10),
     currentGain(1.0f),
-    currentGamma(2.2f),
+    currentGamma(1.0f),
     currentContrast(1.0f),
     currentBrightness(0.0f),
     currentPerceptualCorrection(false),
     perceptualAction(nullptr),
     contrastSlider(nullptr),
-    brightnessSlider(nullptr)
+    brightnessSlider(nullptr),
+    currentFileName(""),
+    lastChangedSetting("")
 {
     setWindowTitle("SEG-Y Viewer");
     resize(1600, 1000); // Увеличенный размер для лучшего отображения данных
@@ -83,6 +86,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Подключаем сигналы от панели настроек
     connect(settingsPanel, &SettingsPanel::settingsChanged, this, &MainWindow::onSettingsChanged);
+    connect(settingsPanel, &SettingsPanel::fullTimeRequested, this, &MainWindow::onFullTimeRequested);
+    connect(settingsPanel, &SettingsPanel::fullTracesRequested, this, &MainWindow::onFullTracesRequested);
     
     // Инициализируем панель настроек
     settingsPanel->setTracesPerPage(1000);
@@ -92,6 +97,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(viewer, &SegyViewer::traceInfoUnderCursor,
             this, &MainWindow::traceUnderCursor);
+    connect(viewer, &SegyViewer::zoomChanged, this, &MainWindow::onZoomChanged);
 }
 
 void MainWindow::createMenus() {
@@ -132,6 +138,12 @@ void MainWindow::createMenus() {
     QAction* resetAction = new QAction("Reset All Settings", this);
     connect(resetAction, &QAction::triggered, this, &MainWindow::resetColorSettings);
     colorMenu->addAction(resetAction);
+    
+    // Zoom controls
+    viewMenu->addSeparator();
+    QAction* resetZoomAction = new QAction("Reset Zoom", this);
+    connect(resetZoomAction, &QAction::triggered, this, &MainWindow::resetZoom);
+    viewMenu->addAction(resetZoomAction);
 }
 
 void MainWindow::setupScrollBar() {
@@ -168,13 +180,32 @@ void MainWindow::openAsTraces() {
     if (!dataManager->loadFile(fileName.toStdString())) {
         QMessageBox::warning(this, "Error", "Failed to load SEG-Y file");
         // Сбрасываем информацию о файле в SettingsPanel
-        settingsPanel->setFileInfo(0, 0.0f);
+        settingsPanel->setFileInfo(0, 0.0f, 0);
+        // Сбрасываем имя файла и заголовок окна
+        currentFileName = "";
+        updateWindowTitle();
+        // Сбрасываем зум и gain при ошибке загрузки
+        viewer->resetZoom();
+        currentGain = 1.0f;
+        settingsPanel->setGain(currentGain);
+        viewer->setGain(currentGain);
         return;
     }
+    
+    // Сохраняем имя файла и обновляем заголовок окна
+    currentFileName = fileName;
+    updateWindowTitle();
 
     viewer->setDataManager(dataManager);
     viewer->setCurrentPage(0);
-    viewer->setGain(currentGain); // Применяем gain сразу при загрузке
+    
+    // Сбрасываем зум при открытии нового файла
+    viewer->resetZoom();
+    
+    // Сбрасываем gain на значение по умолчанию при открытии нового файла
+    currentGain = 1.0f;
+    settingsPanel->setGain(currentGain);
+    viewer->setGain(currentGain);
     viewer->setGridEnabled(settingsPanel->getGridEnabled()); // Применяем настройку сетки
     
     // Обновляем информацию о файле в SettingsPanel
@@ -187,7 +218,7 @@ void MainWindow::openAsTraces() {
             dt = dataManager->getSampleInterval();
         }
     }
-    settingsPanel->setFileInfo(totalSamples, dt);
+    settingsPanel->setFileInfo(totalSamples, dt, dataManager->traceCount());
     
     // Автоматически устанавливаем time per page равным полному времени трассы
     if (totalSamples > 0) {
@@ -203,13 +234,13 @@ void MainWindow::openAsTraces() {
     int totalTraces = dataManager->traceCount();
     int tracesPerPage = settingsPanel->getTracesPerPage();
     
-    // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
-    if (tracesPerPage == 0) {
-        tracesPerPage = std::min(totalTraces, 5000);
-        
-        // Обновляем значение в spin box, чтобы показать реальное установленное значение
-        settingsPanel->setTracesPerPage(tracesPerPage);
-    }
+            // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
+        if (tracesPerPage == 0) {
+            tracesPerPage = std::min(totalTraces, 5000);
+            
+            // Обновляем значение в spin box, чтобы показать реальное установленное значение
+            settingsPanel->setTracesPerPage(tracesPerPage);
+        }
     
     // Теперь устанавливаем вычисленное значение в viewer
     viewer->setTracesPerPage(tracesPerPage);
@@ -250,8 +281,10 @@ void MainWindow::openAsTraces() {
             verticalScrollBar->setPageStep(totalSamples);
         }
         
-        // Сбрасываем начальный сэмпл в viewer
-        viewer->setStartSample(0);
+                // Сбрасываем начальный сэмпл в viewer только если изменялись параметры, влияющие на зум
+                if (lastChangedSetting != "gain" && lastChangedSetting != "colorScheme") {
+                    viewer->setStartSample(0);
+                }
     } else {
         // Если нет сэмплов, скрываем вертикальный скролл-бар
         verticalScrollBar->setVisible(false);
@@ -287,30 +320,95 @@ void MainWindow::traceUnderCursor(int traceIndex, int sampleIndex, float amplitu
 void MainWindow::openAsGathers() {
     // Заглушка для метода открытия как gathers
     QMessageBox::information(this, "Info", "Gathers functionality not implemented yet");
+    
+    // TODO: При реализации gathers добавить обновление заголовка окна
+    // currentFileName = fileName;
+    // updateWindowTitle();
 }
 
 MainWindow::~MainWindow() {
     // Деструктор
 }
 
-void MainWindow::onSettingsChanged() {
+void MainWindow::onSettingsChanged(const QString& setting) {
+    // Сохраняем информацию о том, какой параметр изменился
+    lastChangedSetting = setting;
+    
+
+    
     // Применяем новые настройки к viewer
     int tracesPerPage = settingsPanel->getTracesPerPage();
     
-    // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
-    if (dataManager && tracesPerPage == 0) {
-        int totalTraces = dataManager->traceCount();
-        tracesPerPage = std::min(totalTraces, 5000);
-        
-        // Обновляем значение в spin box, чтобы показать реальное установленное значение
-        settingsPanel->setTracesPerPage(tracesPerPage);
-    }
+            // Если tracesPerPage = 0, используем максимальное количество трасс с ограничением 5000
+        if (dataManager && tracesPerPage == 0) {
+            int totalTraces = dataManager->traceCount();
+            tracesPerPage = std::min(totalTraces, 5000);
+            
+            // Обновляем значение в spin box, чтобы показать реальное установленное значение
+            settingsPanel->setTracesPerPage(tracesPerPage);
+        }
     
-    viewer->setTracesPerPage(tracesPerPage);
-    viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
-    viewer->setColorScheme(settingsPanel->getColorScheme());
-    viewer->setGain(settingsPanel->getGain());
-    viewer->setGridEnabled(settingsPanel->getGridEnabled());
+    // При изменении gain или colorScheme сохраняем текущий зум
+    if (lastChangedSetting == "gain" || lastChangedSetting == "colorScheme") {
+        // Сохраняем текущие значения зума
+        int currentStartSample = viewer->getStartSample();
+        int currentSamplesPerPage = viewer->getSamplesPerPage();
+        int currentStartTrace = viewer->startTrace();
+        int currentTracesPerPage = viewer->getTracesPerPage();
+        
+
+        
+        // Применяем только настройки, не влияющие на зум
+        viewer->setColorScheme(settingsPanel->getColorScheme());
+        viewer->setGain(settingsPanel->getGain());
+        viewer->setGridEnabled(settingsPanel->getGridEnabled());
+        
+        // Восстанавливаем зум БЕЗ вызова settingsChanged
+        // Блокируем сигналы от settingsPanel, чтобы избежать рекурсии
+        settingsPanel->blockSignals(true);
+        viewer->setStartSample(currentStartSample);
+        viewer->setSamplesPerPage(currentSamplesPerPage);
+        viewer->setStartTrace(currentStartTrace);
+        viewer->setTracesPerPage(currentTracesPerPage);
+        settingsPanel->blockSignals(false);
+        
+
+        
+        // При изменении gain или colorScheme также обновляем скролл-бары
+        // для корректного отображения вертикального скролл-бара при зумировании
+        if (dataManager && dataManager->traceCount() > 0) {
+            // Обновляем вертикальный скролл-бар для сэмплов
+            int samplesPerPage = currentSamplesPerPage; // Используем сохраненное значение зума
+            auto traces = dataManager->getTracesRange(0, 1);
+            if (!traces.empty() && !traces[0].empty()) {
+                int totalSamples = traces[0].size();
+                
+                if (samplesPerPage > 0 && samplesPerPage < totalSamples) {
+                    // Если samples per page меньше общего количества сэмплов, показываем скролл-бар
+                    int maxSampleValue = std::max(0, totalSamples - samplesPerPage);
+                    
+                    verticalScrollBar->setVisible(true);
+                    verticalScrollBar->setMinimum(0);
+                    verticalScrollBar->setMaximum(maxSampleValue);
+                    verticalScrollBar->setValue(currentStartSample); // Устанавливаем текущую позицию зума
+                    verticalScrollBar->setPageStep(samplesPerPage);
+                    
+                    qDebug() << "Vertical scrollbar updated for gain change - maxValue:" << maxSampleValue << "currentValue:" << currentStartSample;
+                } else {
+                    // Если показываем все время, скрываем скролл-бар
+                    verticalScrollBar->setVisible(false);
+                    qDebug() << "Vertical scrollbar hidden for gain change (showing all time)";
+                }
+            }
+        }
+    } else {
+        // При изменении других параметров применяем все настройки (включая сброс зума)
+        viewer->setTracesPerPage(tracesPerPage);
+        viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
+        viewer->setColorScheme(settingsPanel->getColorScheme());
+        viewer->setGain(settingsPanel->getGain());
+        viewer->setGridEnabled(settingsPanel->getGridEnabled());
+    }
     
     // Устанавливаем фиксированный размер кэша (5000)
     dataManager->setCacheSize(5000);
@@ -354,8 +452,10 @@ void MainWindow::onSettingsChanged() {
                 int totalTimeMs = (totalSamples - 1) * dt; // общее время в миллисекундах (сэмплы от 0 до totalSamples-1)
                 samplesPerPage = totalTimeMs;
                 
-                // Обновляем значение в spin box, чтобы показать реальное установленное значение
-                settingsPanel->setSamplesPerPage(samplesPerPage);
+                // Обновляем значение в spin box только если это не изменение gain
+                if (lastChangedSetting != "gain") {
+                    settingsPanel->setSamplesPerPage(samplesPerPage);
+                }
             }
             
             if (samplesPerPage > 0 && samplesPerPage < totalSamples) {
@@ -368,12 +468,17 @@ void MainWindow::onSettingsChanged() {
                 verticalScrollBar->setValue(0);
                 verticalScrollBar->setPageStep(samplesPerPage);
                 
-                // Сбрасываем начальный сэмпл в viewer
-                viewer->setStartSample(0);
+                // Сбрасываем начальный сэмпл в viewer только если изменялись параметры, влияющие на зум
+                if (lastChangedSetting != "gain" && lastChangedSetting != "colorScheme") {
+                    viewer->setStartSample(0);
+                }
             } else {
                 // Если samples per page = 0 или >= totalSamples, скрываем вертикальный скролл-бар
                 verticalScrollBar->setVisible(false);
-                viewer->setStartSample(0);
+                // Сбрасываем начальный сэмпл в viewer только если изменялись параметры, влияющие на зум
+                if (lastChangedSetting != "gain" && lastChangedSetting != "colorScheme") {
+                    viewer->setStartSample(0);
+                }
             }
         }
     }
@@ -383,6 +488,84 @@ void MainWindow::onSettingsChanged() {
 }
 
 // Реализация методов для продвинутых настроек цветовых схем
+void MainWindow::onFullTimeRequested() {
+    // При нажатии Full для времени, сбрасываем зум только по времени
+    if (viewer) {
+        viewer->resetZoomTimeOnly();
+    }
+}
+
+void MainWindow::onFullTracesRequested() {
+    // При нажатии Full для трасс, сбрасываем зум только по трассам
+    if (viewer) {
+        viewer->resetZoomTracesOnly();
+    }
+}
+
+void MainWindow::wheelEvent(QWheelEvent* event) {
+    // Изменяем gain при прокрутке колесом мыши
+    if (event->angleDelta().y() > 0) {
+        // Прокрутка "вперед" (от себя) - увеличиваем gain
+        float newGain = currentGain + 0.1f;
+        if (newGain <= 20.0f) { // Ограничиваем максимальным значением
+            currentGain = newGain;
+            settingsPanel->setGain(currentGain);
+            viewer->setGain(currentGain);
+        }
+    } else if (event->angleDelta().y() < 0) {
+        // Прокрутка "назад" (к себе) - уменьшаем gain
+        float newGain = currentGain - 0.1f;
+        if (newGain >= 0.5f) { // Ограничиваем минимальным значением
+            currentGain = newGain;
+            settingsPanel->setGain(currentGain);
+            viewer->setGain(currentGain);
+        }
+    }
+    
+    // Принимаем событие
+    event->accept();
+}
+
+void MainWindow::onZoomChanged() {
+    // Обновляем скролл-бары при изменении зума
+    
+    // Обновляем горизонтальный скролл-бар
+    if (dataManager && dataManager->traceCount() > 0) {
+        int totalTraces = dataManager->traceCount();
+        int tracesPerPage = viewer->getTracesPerPage();
+        
+        int maxValue = std::max(0, totalTraces - tracesPerPage);
+        scrollBar->setMaximum(maxValue);
+        scrollBar->setPageStep(tracesPerPage);
+        
+        // Убеждаемся, что текущее значение не превышает максимум
+        if (scrollBar->value() > maxValue) {
+            scrollBar->setValue(maxValue);
+        }
+    }
+    
+    // Обновляем вертикальный скролл-бар
+    if (dataManager && dataManager->traceCount() > 0) {
+        int samplesPerPage = viewer->getSamplesPerPage();
+        auto traces = dataManager->getTracesRange(0, 1);
+        if (!traces.empty() && !traces[0].empty()) {
+            int totalSamples = traces[0].size();
+            
+            if (samplesPerPage > 0 && samplesPerPage < totalSamples) {
+                // Показываем скролл-бар
+                int maxSampleValue = std::max(0, totalSamples - samplesPerPage);
+                verticalScrollBar->setVisible(true);
+                verticalScrollBar->setMinimum(0);
+                verticalScrollBar->setMaximum(maxSampleValue);
+                verticalScrollBar->setPageStep(samplesPerPage);
+            } else {
+                // Скрываем скролл-бар
+                verticalScrollBar->setVisible(false);
+            }
+        }
+    }
+}
+
 void MainWindow::openGammaDialog() {
     bool ok;
     float gamma = QInputDialog::getDouble(this, "Gamma Correction", 
@@ -449,7 +632,7 @@ void MainWindow::togglePerceptualCorrection(bool enabled) {
 
 void MainWindow::resetColorSettings() {
     // Сбрасываем все настройки к значениям по умолчанию
-    currentGamma = 2.2f;
+            currentGamma = 1.0f;
     currentContrast = 1.0f;
     currentBrightness = 0.0f;
     currentPerceptualCorrection = false;
@@ -487,5 +670,22 @@ void MainWindow::onBrightnessSliderChanged(int value) {
     currentBrightness = brightness;
     viewer->setBrightness(brightness);
     viewer->update();
+}
+
+void MainWindow::resetZoom() {
+    if (viewer) {
+        viewer->resetZoom();
+    }
+}
+
+void MainWindow::updateWindowTitle() {
+    if (currentFileName.isEmpty()) {
+        setWindowTitle("SEG-Y Viewer");
+    } else {
+        // Извлекаем только имя файла без пути
+        QFileInfo fileInfo(currentFileName);
+        QString fileName = fileInfo.fileName();
+        setWindowTitle(QString("SEG-Y Viewer - %1").arg(fileName));
+    }
 }
 

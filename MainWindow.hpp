@@ -2,6 +2,8 @@
 
 #include <QMainWindow> // обязательно
 #include <QScrollBar>
+#include <QDebug>
+#include <QWheelEvent>
 #include "SegyViewer.hpp"
 #include "SegyDataManager.hpp"
 #include "StatusPanel.hpp"
@@ -22,7 +24,7 @@ private slots:
     void openAsGathers();
     void openSettings();
     void traceUnderCursor(int traceIndex, int sampleIndex, float amplitude);
-    void onSettingsChanged();
+    void onSettingsChanged(const QString& setting = "");
     void onScrollBarChanged(int value);
     void onVerticalScrollBarChanged(int value);
     
@@ -35,8 +37,20 @@ private slots:
     // Слоты для обработки изменений слайдеров
     void onContrastSliderChanged(int value);
     void onBrightnessSliderChanged(int value);
+    
+    // Слот для сброса зума
+    void resetZoom();
+    void onFullTimeRequested();
+    void onFullTracesRequested();
+    
+    // Слот для обновления скролл-баров при изменении зума
+    void onZoomChanged();
+    
+    // Метод для обновления заголовка окна
+    void updateWindowTitle();
 
 private:
+    void wheelEvent(QWheelEvent* event) override;
     void createMenus();
     void setupScrollBar();
     
@@ -64,5 +78,11 @@ private:
     // Ссылки на слайдеры для обновления настроек
     QSlider* contrastSlider;
     QSlider* brightnessSlider;
+    
+    // Имя открытого файла
+    QString currentFileName;
+    
+    // Переменная для отслеживания последнего измененного параметра
+    QString lastChangedSetting;
 };
 

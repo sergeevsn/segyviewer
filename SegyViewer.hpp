@@ -1,6 +1,8 @@
 #pragma once
 #include <QWidget>
+#include <QDebug>
 #include <QString>
+#include <QTimer>
 #include <vector>
 #include <limits>
 #include <cstdint>
@@ -17,14 +19,22 @@ public:
     int currentPage() const { return pageIndex; }
     int startTrace() const { return startTraceIndex; }
 
-    void setTracesPerPage(int tpp) { tracesPerPage = tpp; }
+    void setTracesPerPage(int tpp) { 
+        tracesPerPage = tpp; 
+    }
     int getTracesPerPage() const { return tracesPerPage; }
-    void setSamplesPerPage(int spp) { samplesPerPage = spp; colorMapValid = false; }
+    void setSamplesPerPage(int spp) { 
+        samplesPerPage = spp; 
+        colorMapValid = false; 
+    }
     int getSamplesPerPage() const { return samplesPerPage; }
-    void setStartSample(int sampleIndex) { startSampleIndex = sampleIndex; colorMapValid = false; }
+    void setStartSample(int sampleIndex) { 
+        startSampleIndex = sampleIndex; 
+        colorMapValid = false; 
+    }
     int getStartSample() const { return startSampleIndex; }
     void setColorScheme(const QString& scheme);
-    void setGain(float g) { gain = g; colorMapValid = false; }
+    void setGain(float g) { gain = g; updateEffectiveAmplitudeRange(); colorMapValid = false; }
     void setGridEnabled(bool enabled) { gridEnabled = enabled; update(); }
     
     // Новые методы для цветовых схем
@@ -33,17 +43,32 @@ public:
     void setBrightness(float b);
     void setPerceptualCorrection(bool enabled);
 
+    // Методы для зума
+    void resetZoom();
+    void resetZoomTimeOnly();     // Сброс зума только по времени
+    void resetZoomTracesOnly();   // Сброс зума только по трассам
+    void zoomToRegion(int startTrace, int endTrace, int startSample, int endSample);
+    QString getZoomHelpText() const;
+
 signals:
     void traceInfoUnderCursor(int traceIndex, int sampleIndex, float amplitude);
+    void zoomChanged(); // Сигнал при изменении зума
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private:
     void updateColorMap();
     uint32_t amplitudeToRgb(float amplitude) const; // быстрый доступ через LUT
     int calculateOptimalTimeStep(float totalTimeMs, int height, int labelSpacing) const; // расчет оптимального шага времени
+    void drawSelectionRect(QPainter& painter);
+    void updateZoomFromSelection();
+    void computePercentiles();
+    void updateEffectiveAmplitudeRange();
 
     SegyDataManager* dataManager;
     int pageIndex;
@@ -66,6 +91,40 @@ private:
     float gain;
     bool globalStatsComputed;
     bool gridEnabled;      // Включена ли сетка
+    
+    // Для перцентильной нормализации
+    std::vector<float> amplitudePercentiles;
+    bool percentilesComputed;
+    float effectiveMinAmplitude;
+    float effectiveMaxAmplitude;
+
+    // Переменные для зума
+    bool isZooming;
+    QPoint zoomStart;
+    QPoint zoomEnd;
+    bool hasZoomSelection;
+    
+    // Состояние зума
+    int originalStartTrace;
+    int originalStartSample;
+    int originalTracesPerPage;
+    int originalSamplesPerPage;
+    bool isZoomed;
+    
+    // Таймер для обновления зума
+    QTimer* zoomUpdateTimer;
 
     std::vector<uint32_t> lut; // таблица цветов (256 уровней)
+    
+    // Кэш для оптимизации рендеринга
+    QImage cachedImage;
+    bool imageCacheValid;
+    int lastRenderedWidth;
+    int lastRenderedHeight;
+    int lastRenderedStartTrace;
+    int lastRenderedStartSample;
+    int lastRenderedTracesPerPage;
+    int lastRenderedSamplesPerPage;
+    float lastRenderedGain;
+    QString lastRenderedColorScheme;
 };

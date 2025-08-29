@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cmath>
+#include <cstring>
 
 struct FieldInfo {
     int offset; // 1-based offset
@@ -20,14 +21,30 @@ inline int32_t get_i32_be(const uint8_t* buf, int offset1based) {
            buf[offset + 3];
 }
 
+#define IEEEMAX 0x7FFFFFFF
+#define IEMAXIB 0x611FFFFF
+#define IEMINIB 0x21200000
+
 inline float ibm_to_float(uint32_t ibm) {
-    if (ibm == 0) return 0.0f;
-    int sign = ((ibm >> 31) & 0x01);
-    int exponent = ((ibm >> 24) & 0x7F) - 64;
-    uint32_t fraction = ibm & 0x00FFFFFF;
-    double mantissa = static_cast<double>(fraction) / static_cast<double>(0x01000000);
-    double value = std::ldexp(mantissa, exponent * 4);
-    return sign ? -static_cast<float>(value) : static_cast<float>(value);
+    static const int it[8] = { 0x21800000, 0x21400000, 0x21000000, 0x21000000,
+                               0x20c00000, 0x20c00000, 0x20c00000, 0x20c00000 };
+    static const int mt[8] = { 8, 4, 2, 2, 1, 1, 1, 1 };
+    unsigned int manthi, iexp, inabs;
+    int ix;
+    uint32_t u = ibm;
+
+    manthi = u & 0x00ffffff;
+    ix     = manthi >> 21;
+    iexp   = ( ( u & 0x7f000000 ) - it[ix] ) << 1;
+    manthi = manthi * mt[ix] + iexp;
+    inabs  = u & 0x7fffffff;
+    if ( inabs > IEMAXIB ) manthi = IEEEMAX;
+    manthi = manthi | ( u & 0x80000000 );
+    u = ( inabs < IEMINIB ) ? 0 : manthi;
+    
+    float result;
+    std::memcpy(&result, &u, sizeof(u));
+    return result;
 }
 
 inline uint32_t ieee_to_ibm(float val) {

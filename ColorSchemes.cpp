@@ -3,7 +3,7 @@
 #include <cmath>
 
 // Статические переменные
-float ColorSchemes::s_gamma = 2.2f;
+float ColorSchemes::s_gamma = 1.0f;  // Линейная интерполяция без гамма-коррекции
 bool ColorSchemes::s_perceptualCorrection = false;
 std::map<QString, std::unique_ptr<ColorScheme>> ColorSchemes::s_customSchemes;
 

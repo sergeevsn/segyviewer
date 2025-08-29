@@ -30,7 +30,7 @@ add_executable(SegyViewer
     SettingsDialog.cpp
     SettingsPanel.cpp
     TraceInfoPanel.cpp
-    SegyReader.cpp
+    sgylib/SegyReader.cpp
     ColorSchemes.cpp
 )
 

@@ -8,8 +8,10 @@ class StatusPanel : public QWidget {
 public:
     explicit StatusPanel(QWidget *parent = nullptr);
     void updateInfo(int traceIndex, int sampleIndex, float amplitude, float dt);
+    void showZoomHelp();
 
 private:
-    QLabel* label;
+    QLabel* traceLabel;    // Лейбл для информации о трассе (слева)
+    QLabel* zoomLabel;     // Лейбл для информации о зуме (справа)
 };
 

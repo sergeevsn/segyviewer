@@ -25,7 +25,7 @@ SettingsDialog::SettingsDialog(const ViewerSettings& initial, QWidget* parent)
     if (idx >= 0) colorCombo->setCurrentIndex(idx);
 
     gainSpin = new QDoubleSpinBox(this);
-    gainSpin->setRange(0.1, 50.0); // Увеличили максимальное значение до 50
+    gainSpin->setRange(0.5, 20.0); // Диапазон для перцентильной нормализации
     gainSpin->setSingleStep(0.1);
     gainSpin->setDecimals(1);
     gainSpin->setValue(initial.gain);

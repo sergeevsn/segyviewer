@@ -17,13 +17,20 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     // Traces per page
     QHBoxLayout* tracesLayout = new QHBoxLayout();
-    QLabel* tracesLabel = new QLabel("Traces per page:", this);
+    QLabel* tracesPerPageLabel = new QLabel("Traces per page:", this);
     tracesSpinBox = new QSpinBox(this);
     tracesSpinBox->setRange(0, 5000);
     tracesSpinBox->setValue(1000);
-    tracesSpinBox->setSpecialValueText("Max"); // 0 означает "максимум трасс"
-    tracesLayout->addWidget(tracesLabel);
+    tracesSpinBox->setSpecialValueText("Max"); // 0 означает "максимум трасс" (5000)
+    
+    // Кнопка "Full" для установки максимального количества трасс
+    fullTracesButton = new QPushButton("Full", this);
+    fullTracesButton->setMaximumWidth(50);
+    fullTracesButton->setToolTip("Set to maximum traces per page");
+    
+    tracesLayout->addWidget(tracesPerPageLabel);
     tracesLayout->addWidget(tracesSpinBox);
+    tracesLayout->addWidget(fullTracesButton);
     displayLayout->addLayout(tracesLayout);
     
     mainLayout->addWidget(displayGroup);
@@ -39,7 +46,12 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     samplesSpinBox->setRange(0, 10000);
     samplesSpinBox->setSingleStep(50);
     samplesSpinBox->setValue(0);
-    samplesSpinBox->setSpecialValueText("All"); // 0 означает "все время"
+    samplesSpinBox->setSpecialValueText("All"); // 0 означает "все время" (полное время трассы)
+    
+    // Кнопка "Full" для установки максимального времени (все время)
+    fullTimeButton = new QPushButton("Full", this);
+    fullTimeButton->setMaximumWidth(50);
+    fullTimeButton->setToolTip("Set to show all time");
     
     // Устанавливаем минимальное значение 100 для предотвращения зависания
     // (0 остается специальным значением "все время")
@@ -48,6 +60,7 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     connect(samplesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onSamplesPerPageValueChanged()));
     samplesControlLayout->addWidget(samplesPerPageLabel);
     samplesControlLayout->addWidget(samplesSpinBox);
+    samplesControlLayout->addWidget(fullTimeButton);
     samplesLayout->addLayout(samplesControlLayout);
     
     mainLayout->addWidget(samplesGroup);
@@ -73,11 +86,11 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QGroupBox* imageGroup = new QGroupBox("", this);
     QVBoxLayout* imageLayout = new QVBoxLayout(imageGroup);
     
-    // Gain
+    // Gain (перцентильная нормализация)
     QHBoxLayout* gainLayout = new QHBoxLayout();
     QLabel* gainLabel = new QLabel("Gain:", this);
     gainSpinBox = new QDoubleSpinBox(this);
-    gainSpinBox->setRange(0.1, 50.0);
+    gainSpinBox->setRange(0.5, 20.0);
     gainSpinBox->setSingleStep(0.1);
     gainSpinBox->setDecimals(1);
     gainSpinBox->setValue(1.0);
@@ -126,6 +139,16 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     fileInfoRow->addWidget(dtInfoLabel);
     fileInfoRow->addWidget(dtLabel);
     
+    // Добавляем небольшой отступ между dt и traces
+    fileInfoRow->addSpacing(15);
+    
+    // Traces info
+    QLabel* tracesInfoLabel = new QLabel("Traces:", this);
+    tracesLabel = new QLabel("No file", this);
+    tracesLabel->setStyleSheet("QLabel { color: gray; }");
+    fileInfoRow->addWidget(tracesInfoLabel);
+    fileInfoRow->addWidget(tracesLabel);
+    
     fileInfoLayout->addLayout(fileInfoRow);
     
     // Добавляем растягивающийся элемент перед File Info для выравнивания по правому краю
@@ -140,7 +163,9 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     
     // Подключаем сигналы
     connect(tracesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onTracesPerPageChanged()));
+    connect(fullTracesButton, SIGNAL(clicked()), this, SLOT(onFullTracesButtonClicked()));
     connect(samplesSpinBox, SIGNAL(valueChanged(int)), this, SLOT(onSamplesPerPageChanged()));
+    connect(fullTimeButton, SIGNAL(clicked()), this, SLOT(onFullTimeButtonClicked()));
     connect(colorCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(onColorSchemeChanged()));
     connect(gainSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onGainChanged()));
     connect(gridCheckBox, SIGNAL(toggled(bool)), this, SLOT(onGridEnabledChanged()));
@@ -191,7 +216,12 @@ void SettingsPanel::setGridEnabled(bool enabled) {
     gridCheckBox->setChecked(enabled);
 }
 
-void SettingsPanel::setFileInfo(int samples, float dt) {
+void SettingsPanel::setFileInfo(int samples, float dt, int traces) {
+    // Проверяем, что все лейблы инициализированы
+    if (!samplesLabel || !dtLabel || !tracesLabel) {
+        return;
+    }
+    
     if (samples > 0) {
         samplesLabel->setText(QString::number(samples));
         samplesLabel->setStyleSheet("QLabel { color: black; }");
@@ -200,18 +230,52 @@ void SettingsPanel::setFileInfo(int samples, float dt) {
         QString dtText = QString::number(dt, 'f', 1) + " ms";
         dtLabel->setText(dtText);
         dtLabel->setStyleSheet("QLabel { color: black; }");
+        
+        // Отображаем количество трасс
+        if (traces > 0) {
+            tracesLabel->setText(QString::number(traces));
+            tracesLabel->setStyleSheet("QLabel { color: black; }");
+        } else {
+            tracesLabel->setText("No file");
+            tracesLabel->setStyleSheet("QLabel { color: gray; }");
+        }
     } else {
         samplesLabel->setText("No file");
         samplesLabel->setStyleSheet("QLabel { color: gray; }");
         
         dtLabel->setText("No file");
         dtLabel->setStyleSheet("QLabel { color: gray; }");
+        
+        tracesLabel->setText("No file");
+        tracesLabel->setStyleSheet("QLabel { color: gray; }");
     }
 }
 
 // Слоты для синхронизации
 void SettingsPanel::onTracesPerPageChanged() {
-    emit settingsChanged();
+    emit settingsChanged("tracesPerPage");
+}
+
+void SettingsPanel::onFullTracesButtonClicked() {
+    // Блокируем сигнал settingsChanged при программном изменении значения
+    tracesSpinBox->blockSignals(true);
+    // Устанавливаем максимальное количество трасс (5000)
+    tracesSpinBox->setValue(5000);
+    tracesSpinBox->blockSignals(false);
+    // Испускаем сигнал для частичного сброса зума
+    emit fullTracesRequested();
+    // НЕ испускаем settingsChanged, так как fullTracesRequested уже обновляет отображение
+}
+
+void SettingsPanel::onFullTimeButtonClicked() {
+    // Блокируем сигнал settingsChanged при программном изменении значения
+    samplesSpinBox->blockSignals(true);
+    // Устанавливаем значение 0, что означает "все время"
+    samplesSpinBox->setValue(0);
+    samplesSpinBox->blockSignals(false);
+    // Испускаем сигнал для частичного сброса зума
+    emit fullTimeRequested();
+    // НЕ испускаем settingsChanged, так как fullTimeRequested уже обновляет отображение
 }
 
 void SettingsPanel::onSamplesPerPageValueChanged() {
@@ -233,17 +297,17 @@ void SettingsPanel::onSamplesPerPageChanged() {
 
 void SettingsPanel::onSamplesPerPageDebounced() {
     // Отправляем сигнал только после окончания ввода
-    emit settingsChanged();
+    emit settingsChanged("samplesPerPage");
 }
 
 void SettingsPanel::onColorSchemeChanged() {
-    emit settingsChanged();
+    emit settingsChanged("colorScheme");
 }
 
 void SettingsPanel::onGainChanged() {
-    emit settingsChanged();
+    emit settingsChanged("gain");
 }
 
 void SettingsPanel::onGridEnabledChanged() {
-    emit settingsChanged();
+    emit settingsChanged("gridEnabled");
 }
