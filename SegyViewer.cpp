@@ -139,8 +139,8 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
     int samplesToShow;
     if (samplesPerPage > 0) {
         // Конвертируем время в количество сэмплов
-        float dt = dataManager->getSampleInterval(); // в микросекундах
-        int timeInSamples = static_cast<int>(samplesPerPage / dt);
+        float dt = dataManager->getSampleInterval(); // в миллисекундах
+        int timeInSamples = static_cast<int>(samplesPerPage / dt); // samplesPerPage в мс, dt в мс
         samplesToShow = std::min(timeInSamples, maxSamples);
     } else {
         samplesToShow = maxSamples; // 0 означает "все время"
@@ -163,47 +163,58 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
                    width() - leftMargin - rightMargin, 
                    height() - topMargin - bottomMargin);
     
-    // Ограничиваем размер изображения для производительности
-    const int maxImageHeight = 2000; // Максимальная высота изображения
-    int actualSamplesToRender = std::min(samplesToShow, maxImageHeight);
+    // Создаём QImage размером с поле отображения
+    QImage img(imageRect.width(), imageRect.height(), QImage::Format_ARGB32);
     
-    // Создаём QImage в нужном размере без суперсэмплинга
-    QImage img(traceCount, actualSamplesToRender, QImage::Format_ARGB32);
+    // Вычисляем шаги для масштабирования данных к размеру изображения
+    double traceScale = static_cast<double>(traceCount) / imageRect.width();
+    double sampleScale = static_cast<double>(samplesToShow) / imageRect.height();
     
-    // Вычисляем шаг для пропуска сэмплов, если нужно
-    double sampleStep = 1.0;
-    if (samplesToShow > maxImageHeight) {
-        sampleStep = static_cast<double>(samplesToShow) / maxImageHeight;
-    }
-    
-    for (int y = 0; y < actualSamplesToRender; ++y) {
-        // Заполняем строку с суперсэмплингом
-        for (int x = 0; x < traceCount; ++x) {
-            // Вычисляем индекс сэмпла с учетом шага
-            int sampleIndex = startSampleIndex + static_cast<int>(y * sampleStep);
-            if (sampleIndex >= static_cast<int>(traces[x].size())) {
-                sampleIndex = traces[x].size() - 1;
+    // Заполняем изображение с масштабированием
+    for (int y = 0; y < imageRect.height(); ++y) {
+        for (int x = 0; x < imageRect.width(); ++x) {
+            // Вычисляем индексы трассы и сэмпла с учетом масштабирования
+            int traceIndex = static_cast<int>(x * traceScale);
+            int sampleIndex = startSampleIndex + static_cast<int>(y * sampleScale);
+            
+            // Проверяем границы
+            if (traceIndex >= traceCount) traceIndex = traceCount - 1;
+            if (sampleIndex >= static_cast<int>(traces[traceIndex].size())) {
+                sampleIndex = traces[traceIndex].size() - 1;
             }
-            float amp = traces[x][sampleIndex];
+            
+            float amp = traces[traceIndex][sampleIndex];
             QRgb color = amplitudeToRgb(amp);
             
-            // Заполняем пиксель напрямую без суперсэмплинга
+            // Заполняем пиксель
             img.setPixel(x, y, color);
         }
     }
 
-    // Рисуем изображение напрямую без суперсэмплинга
-    p.drawImage(imageRect, img, QRect(0, 0, img.width(), img.height()));
+    // Рисуем изображение в поле отображения
+    p.drawImage(imageRect, img);
     
     // Вычисляем шаги для подписей
     int traceStep = std::max(1, traceCount / (imageRect.width() / labelSpacing));
     
     // Вычисляем оптимальный шаг времени кратный 250мс
-    float dt = dataManager->getSampleInterval(); // в микросекундах
-    float totalTimeMs = (samplesToShow - 1) * dt; // общее время в миллисекундах (сэмплы от 0 до samplesToShow-1)
+    float dt = dataManager->getSampleInterval(); // в миллисекундах
+    
+    // При зуме учитываем начальную позицию зума для корректного расчета времени
+    // Округляем время до целых миллисекунд для точности
+    int startTimeMs = static_cast<int>(std::round(startSampleIndex * dt)); // время начала зума в миллисекундах
+    int endTimeMs = static_cast<int>(std::round((startSampleIndex + samplesToShow - 1) * dt)); // время конца зума в миллисекундах
+    int totalTimeMs = endTimeMs - startTimeMs; // общее время зума в миллисекундах
+    
+
     
     // Вычисляем оптимальный шаг времени в миллисекундах
     int timeStepMs = calculateOptimalTimeStep(totalTimeMs, imageRect.height(), labelSpacing);
+    
+    // Исправляем шаг времени для коротких интервалов
+    if (totalTimeMs <= 1000) {
+        timeStepMs = 100; // Для времени до 1 секунды всегда используем шаг 100мс
+    }
     
     // Рисуем оси
     p.setPen(Qt::black); // Черные оси на белом фоне
@@ -215,13 +226,15 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
         
         // Вертикальные линии сетки (трассы)
         for (int i = 0; i < traceCount; i += traceStep) {
-            int x = leftMargin + (i * imageRect.width()) / traceCount;
+            int x = leftMargin + static_cast<int>((i * imageRect.width()) / traceCount);
             p.drawLine(x, topMargin, x, height() - bottomMargin);
         }
         
         // Горизонтальные линии сетки (время) - используем оптимальный шаг
-        for (int timeMs = 0; timeMs <= totalTimeMs; timeMs += timeStepMs) {
-            float timeRatio = timeMs / totalTimeMs;
+        // Начинаем с ближайшего кратного шагу времени значения
+        int startTimeMsInt = (startTimeMs / timeStepMs) * timeStepMs;
+        for (int timeMs = startTimeMsInt; timeMs <= endTimeMs; timeMs += timeStepMs) {
+            float timeRatio = static_cast<float>(timeMs - startTimeMs) / totalTimeMs;
             int y = topMargin + static_cast<int>(timeRatio * imageRect.height());
             p.drawLine(leftMargin, y, width() - rightMargin, y);
         }
@@ -250,10 +263,12 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
         p.drawText(textRect, Qt::AlignCenter, label);
     }
     
-    // Подписи оси времени - используем временные интервалы кратные 250мс
-    for (int timeMs = 0; timeMs <= totalTimeMs; timeMs += timeStepMs) {
+    // Подписи оси времени - используем временные интервалы кратные вычисленному шагу
+    // Начинаем с ближайшего кратного шагу времени значения
+    int startTimeMsInt = (startTimeMs / timeStepMs) * timeStepMs;
+    for (int timeMs = startTimeMsInt; timeMs <= endTimeMs; timeMs += timeStepMs) {
         // Вычисляем позицию Y для данного времени
-        float timeRatio = timeMs / totalTimeMs;
+        float timeRatio = static_cast<float>(timeMs - startTimeMs) / totalTimeMs;
         int y = topMargin + static_cast<int>(timeRatio * imageRect.height());
         
         // Деление - от левого края картинки влево
@@ -433,10 +448,10 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     const int bottomMargin = 80; // Отступ снизу для подписей трасс
     const int rightMargin = 20;  // Минимальный отступ справа
     const int topMargin = 20;    // Минимальный отступ сверху
-    int width = this->width() - leftMargin - rightMargin;
-    int height = this->height() - topMargin - bottomMargin;
+    int imageWidth = this->width() - leftMargin - rightMargin;
+    int imageHeight = this->height() - topMargin - bottomMargin;
     
-    if (width <= 0 || height <= 0) return;
+    if (imageWidth <= 0 || imageHeight <= 0) return;
     
     int traceCount = traces.size();
     int maxSamples = 0;
@@ -451,27 +466,35 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
     int samplesToShow;
     if (samplesPerPage > 0) {
         // Конвертируем время в количество сэмплов
-        float dt = dataManager->getSampleInterval(); // в микросекундах
-        int timeInSamples = static_cast<int>(samplesPerPage / dt);
+        float dt = dataManager->getSampleInterval(); // в миллисекундах
+        int timeInSamples = static_cast<int>(samplesPerPage / dt); // samplesPerPage в мс, dt в мс
         samplesToShow = std::min(timeInSamples, maxSamples);
     } else {
         samplesToShow = maxSamples; // 0 означает "все время"
     }
 
-    double pixelWidth = static_cast<double>(width) / traceCount;
-    double pixelHeight = static_cast<double>(height) / samplesToShow;
+    // Используем ту же логику масштабирования, что и в paintEvent
+    double traceScale = static_cast<double>(traceCount) / imageWidth;
+    double sampleScale = static_cast<double>(samplesToShow) / imageHeight;
 
     // Корректируем координаты мыши с учетом отступов
     int mouseX = event->x() - leftMargin;
     int mouseY = event->y() - topMargin;
     
-    if (mouseX < 0 || mouseX >= width || mouseY < 0 || mouseY >= height) return;
+    if (mouseX < 0 || mouseX >= imageWidth || mouseY < 0 || mouseY >= imageHeight) {
+        return;
+    }
 
-    int traceIndex = static_cast<int>(mouseX / pixelWidth);
-    int sampleIndex = static_cast<int>(mouseY / pixelHeight) + startSampleIndex;
+    // Вычисляем индексы трассы и сэмпла с учетом масштабирования
+    int traceIndex = static_cast<int>(mouseX * traceScale);
+    int sampleIndex = startSampleIndex + static_cast<int>(mouseY * sampleScale);
     
-    if (traceIndex < 0 || traceIndex >= traceCount) return;
-    if (sampleIndex < 0 || sampleIndex >= static_cast<int>(traces[traceIndex].size())) return;
+    if (traceIndex < 0 || traceIndex >= traceCount) {
+        return;
+    }
+    if (sampleIndex < 0 || sampleIndex >= static_cast<int>(traces[traceIndex].size())) {
+        return;
+    }
 
     float amp = traces[traceIndex][sampleIndex];
     emit traceInfoUnderCursor(startTraceIndex + traceIndex, sampleIndex, amp);
@@ -488,18 +511,51 @@ int SegyViewer::calculateOptimalTimeStep(float totalTimeMs, int height, int labe
     // Вычисляем базовый шаг времени
     float baseTimeStep = totalTimeMs / maxLabels;
     
-    // Округляем до ближайшего кратного 250мс
-    int roundedStepMs = static_cast<int>(std::round(baseTimeStep / 250.0f)) * 250;
+    // Определяем оптимальный шаг времени на основе общего времени
+    int optimalStepMs;
+    if (totalTimeMs <= 1000) {
+        // Для времени до 1 секунды используем шаг 100мс
+        optimalStepMs = 100;
+    } else if (totalTimeMs <= 5000) {
+        // Для времени до 5 секунд используем шаг 250мс
+        optimalStepMs = 250;
+    } else if (totalTimeMs <= 10000) {
+        // Для времени до 10 секунд используем шаг 500мс
+        optimalStepMs = 500;
+    } else {
+        // Для большего времени используем шаг 1000мс
+        optimalStepMs = 1000;
+    }
     
-    // Убеждаемся, что шаг не слишком маленький
-    if (roundedStepMs < 250) roundedStepMs = 250;
+    // Объявляем переменную для шага времени
+    int roundedStepMs;
+    
+    // Для времени до 1 секунды всегда используем шаг 100мс
+    if (totalTimeMs <= 1000) {
+        roundedStepMs = 100;
+    } else {
+        // Для большего времени округляем базовый шаг до ближайшего кратного оптимальному
+        roundedStepMs = static_cast<int>(std::round(baseTimeStep / static_cast<float>(optimalStepMs))) * optimalStepMs;
+        
+        // Убеждаемся, что шаг не слишком маленький
+        if (roundedStepMs < optimalStepMs) {
+            // Если округление дало слишком маленький шаг, используем оптимальный
+            roundedStepMs = optimalStepMs;
+        }
+        
+        // Убеждаемся, что шаг не слишком большой - не более оптимального
+        if (roundedStepMs > optimalStepMs) {
+            // Если округление дало слишком большой шаг, используем оптимальный
+            roundedStepMs = optimalStepMs;
+        }
+    }
     
     // Убеждаемся, что шаг не слишком большой (не более 1/4 от общего времени)
     if (roundedStepMs > totalTimeMs / 4) {
         roundedStepMs = static_cast<int>(totalTimeMs / 4);
     }
     
-    // Возвращаем шаг в миллисекундах, а не в сэмплах
+    // Возвращаем шаг в миллисекундах
     return roundedStepMs;
 }
 
@@ -544,8 +600,8 @@ void SegyViewer::mouseReleaseEvent(QMouseEvent* event) {
             updateZoomFromSelection();
         }
         
-        // Отключаем отслеживание мыши после завершения выделения
-        setMouseTracking(false);
+        // НЕ отключаем отслеживание мыши в зуме - нужно для StatusPanel
+        // setMouseTracking(false); // Убираем эту строку
         
         // Останавливаем таймер
         zoomUpdateTimer->stop();
@@ -671,6 +727,9 @@ void SegyViewer::resetZoom() {
     isZoomed = false;
     isZooming = false;
     hasZoomSelection = false;
+    
+    // Восстанавливаем отслеживание мыши для StatusPanel
+    setMouseTracking(true);
     
     // Останавливаем таймер
     zoomUpdateTimer->stop();

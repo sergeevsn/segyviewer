@@ -99,6 +99,7 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::traceUnderCursor);
     connect(viewer, &SegyViewer::zoomChanged, this, &MainWindow::onZoomChanged);
     connect(viewer, &SegyViewer::gainChanged, this, &MainWindow::onGainChanged);
+    connect(viewer, &SegyViewer::gridChanged, this, &MainWindow::onGridChanged);
 }
 
 void MainWindow::createMenus() {
@@ -261,8 +262,8 @@ void MainWindow::openAsTraces() {
         int timePerPage = settingsPanel->getSamplesPerPage();
         
         // Конвертируем время в количество сэмплов для сравнения
-        float dt = dataManager->getSampleInterval(); // в микросекундах
-        int timeInSamples = static_cast<int>(timePerPage / dt);
+        float dt = dataManager->getSampleInterval(); // в миллисекундах
+        int timeInSamples = static_cast<int>(timePerPage / dt); // timePerPage в мс, dt в мс
         
         if (timeInSamples > 0 && timeInSamples < totalSamples) {
             // Если time per page меньше полного времени, показываем скролл-бар
@@ -305,8 +306,6 @@ void MainWindow::onVerticalScrollBarChanged(int value) {
     viewer->setStartSample(value);
     // Обновляем отображение
     viewer->update();
-    
-    qDebug() << "Vertical scrollbar changed to value:" << value;
 }
 
 void MainWindow::onGainChanged() {
@@ -319,8 +318,18 @@ void MainWindow::onGainChanged() {
     // НЕ обновляем скролл-бары при изменении гейна!
     // Это предотвращает конфликт между текущей позицией зума и позицией скролл-бара
     // Скролл-бары должны обновляться только при изменении зума (onZoomChanged)
+}
+
+void MainWindow::onGridChanged() {
+    // При изменении грида обновляем только отображение, не трогая зум и скролл-бары
+    // Это предотвращает нежелательную прокрутку и сброс позиции
     
-    qDebug() << "Gain changed - only color map updated, scrollbars preserved";
+    // Обновляем отображение без изменения позиции
+    viewer->update();
+    
+    // НЕ обновляем скролл-бары при изменении грида!
+    // Это предотвращает конфликт между текущей позицией зума и позицией скролл-бара
+    // Скролл-бары должны обновляться только при изменении зума (onZoomChanged)
 }
 
 void MainWindow::traceUnderCursor(int traceIndex, int sampleIndex, float amplitude) {
@@ -365,8 +374,8 @@ void MainWindow::onSettingsChanged(const QString& setting) {
             settingsPanel->setTracesPerPage(tracesPerPage);
         }
     
-    // При изменении gain или colorScheme применяем только настройки, не влияющие на зум
-    if (lastChangedSetting == "gain" || lastChangedSetting == "colorScheme") {
+    // При изменении gain, colorScheme или gridEnabled применяем только настройки, не влияющие на зум
+    if (lastChangedSetting == "gain" || lastChangedSetting == "colorScheme" || lastChangedSetting == "gridEnabled") {
         // Применяем только настройки, не влияющие на зум
         viewer->setColorScheme(settingsPanel->getColorScheme());
         viewer->setGain(settingsPanel->getGain());
@@ -375,7 +384,7 @@ void MainWindow::onSettingsChanged(const QString& setting) {
         // Обработка скролл-баров теперь происходит в onGainChanged
         // для предотвращения дублирования логики
     } else {
-        // При изменении других параметров применяем все настройки (включая сброс зума)
+        // При изменении параметров, влияющих на зум (tracesPerPage, samplesPerPage), применяем все настройки
         viewer->setTracesPerPage(tracesPerPage);
         viewer->setSamplesPerPage(settingsPanel->getSamplesPerPage());
         viewer->setColorScheme(settingsPanel->getColorScheme());
@@ -389,8 +398,8 @@ void MainWindow::onSettingsChanged(const QString& setting) {
     // Обновляем gain
     currentGain = settingsPanel->getGain();
     
-    // Обновляем горизонтальный скролл-бар если файл загружен и НЕ изменялся гейн
-    if (dataManager && dataManager->traceCount() > 0 && lastChangedSetting != "gain" && lastChangedSetting != "colorScheme") {
+    // Обновляем горизонтальный скролл-бар если файл загружен и НЕ изменялись настройки, не влияющие на зум
+    if (dataManager && dataManager->traceCount() > 0 && lastChangedSetting != "gain" && lastChangedSetting != "colorScheme" && lastChangedSetting != "gridEnabled") {
         int totalTraces = dataManager->traceCount();
         int tracesPerPage = settingsPanel->getTracesPerPage();
         
@@ -411,8 +420,8 @@ void MainWindow::onSettingsChanged(const QString& setting) {
         }
     }
     
-    // Обновляем вертикальный скролл-бар для сэмплов только если НЕ изменялся гейн
-    if (dataManager && dataManager->traceCount() > 0 && lastChangedSetting != "gain" && lastChangedSetting != "colorScheme") {
+    // Обновляем вертикальный скролл-бар для сэмплов только если НЕ изменялись настройки, не влияющие на зум
+    if (dataManager && dataManager->traceCount() > 0 && lastChangedSetting != "gain" && lastChangedSetting != "colorScheme" && lastChangedSetting != "gridEnabled") {
         int samplesPerPage = settingsPanel->getSamplesPerPage();
         // Получаем количество сэмплов в первой трассе для оценки
         auto traces = dataManager->getTracesRange(0, 1);
@@ -421,7 +430,7 @@ void MainWindow::onSettingsChanged(const QString& setting) {
             
             // Если samplesPerPage = 0, вычисляем количество сэмплов для полного времени
             if (samplesPerPage == 0) {
-                float dt = dataManager->getSampleInterval(); // в микросекундах
+                float dt = dataManager->getSampleInterval(); // в миллисекундах
                 int totalTimeMs = (totalSamples - 1) * dt; // общее время в миллисекундах (сэмплы от 0 до totalSamples-1)
                 samplesPerPage = totalTimeMs;
                 
@@ -463,9 +472,20 @@ void MainWindow::onFullTimeRequested() {
 }
 
 void MainWindow::onFullTracesRequested() {
-    // При нажатии Full для трасс, сбрасываем зум только по трассам
-    if (viewer) {
+    // При нажатии Full для трасс, устанавливаем максимальное количество трасс и сбрасываем зум
+    if (viewer && dataManager) {
+        // Устанавливаем максимальное количество трасс
+        int maxTraces = dataManager->traceCount(); // Убираем ограничение 5000
+        viewer->setTracesPerPage(maxTraces);
+        
+        // Сбрасываем начальную позицию трасс в 0 (показываем все трассы с начала)
+        viewer->setStartTrace(0);
+        
+        // Сбрасываем зум только по трассам
         viewer->resetZoomTracesOnly();
+        
+        // Обновляем скролл-бары
+        onZoomChanged();
     }
 }
 
@@ -513,8 +533,6 @@ void MainWindow::onZoomChanged() {
         if (scrollBar->value() > maxValue) {
             scrollBar->setValue(maxValue);
         }
-        
-        qDebug() << "Horizontal scrollbar updated for zoom - maxValue:" << maxValue << "currentValue:" << currentStartTrace;
     }
     
     // Обновляем вертикальный скролл-бар
@@ -535,12 +553,9 @@ void MainWindow::onZoomChanged() {
                 // Устанавливаем текущую позицию зума в скролл-бар
                 int currentStartSample = viewer->getStartSample();
                 verticalScrollBar->setValue(currentStartSample);
-                
-                qDebug() << "Vertical scrollbar updated for zoom - maxValue:" << maxSampleValue << "currentValue:" << currentStartSample;
             } else {
                 // Скрываем скролл-бар
                 verticalScrollBar->setVisible(false);
-                qDebug() << "Vertical scrollbar hidden for zoom (showing all time)";
             }
         }
     }

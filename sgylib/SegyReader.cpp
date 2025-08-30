@@ -37,7 +37,7 @@ SegyReader::SegyReader(const std::string& filename) : filename_(filename) {
     // Получаем информацию о трассах из бинарного заголовка
     try {
         num_samples_ = get_bin_header_value_i16("SamplesPerTrace");
-        sample_interval_ = get_bin_header_value_i16("SampleInterval") / 1000.0f; // в микросекундах
+        sample_interval_ = get_bin_header_value_i16("SampleInterval") / 1000.0f; // в миллисекундах
         
         if (num_samples_ <= 0) {
             throw std::runtime_error("Invalid number of samples per trace: " + std::to_string(num_samples_));

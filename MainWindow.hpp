@@ -49,6 +49,9 @@ private slots:
     // Слот для обработки изменений гейна
     void onGainChanged();
     
+    // Слот для обработки изменений грида
+    void onGridChanged();
+    
     // Метод для обновления заголовка окна
     void updateWindowTitle();
 

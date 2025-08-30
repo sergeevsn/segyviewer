@@ -1,6 +1,7 @@
 #include "StatusPanel.hpp"
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QDebug>
 
 StatusPanel::StatusPanel(QWidget *parent)
     : QWidget(parent), 
@@ -23,9 +24,10 @@ StatusPanel::StatusPanel(QWidget *parent)
 }
 
 void StatusPanel::updateInfo(int traceIndex, int sampleIndex, float amplitude, float dt) {
-    // SampleInterval в SEG-Y измеряется в микросекундах
-    // Вычисляем время в миллисекундах: sample * dt (dt уже в микросекундах)
+    // SampleInterval в SEG-Y измеряется в микросекундах, но getSampleInterval() возвращает в миллисекундах
+    // Вычисляем время в миллисекундах: sample * dt (dt в мс, результат в мс)
     float timeMs = sampleIndex * dt;
+    
     traceLabel->setText(QString("Trace: %1 | Time: %2 ms | Amp: %3")
                    .arg(traceIndex).arg(timeMs, 0, 'f', 2).arg(amplitude, 0, 'f', 4));
 }
