@@ -34,7 +34,7 @@ public:
     }
     int getStartSample() const { return startSampleIndex; }
     void setColorScheme(const QString& scheme);
-    void setGain(float g) { gain = g; updateEffectiveAmplitudeRange(); colorMapValid = false; }
+    void setGain(float g) { gain = g; updateEffectiveAmplitudeRange(); colorMapValid = false; emit gainChanged(); }
     void setGridEnabled(bool enabled) { gridEnabled = enabled; update(); }
     
     // Новые методы для цветовых схем
@@ -53,6 +53,7 @@ public:
 signals:
     void traceInfoUnderCursor(int traceIndex, int sampleIndex, float amplitude);
     void zoomChanged(); // Сигнал при изменении зума
+    void gainChanged(); // Сигнал при изменении гейна
 
 protected:
     void paintEvent(QPaintEvent* event) override;

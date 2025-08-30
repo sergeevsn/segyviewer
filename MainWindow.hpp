@@ -46,6 +46,9 @@ private slots:
     // Слот для обновления скролл-баров при изменении зума
     void onZoomChanged();
     
+    // Слот для обработки изменений гейна
+    void onGainChanged();
+    
     // Метод для обновления заголовка окна
     void updateWindowTitle();
 
