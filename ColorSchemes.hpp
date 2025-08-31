@@ -72,19 +72,13 @@ private:
     static float gammaCorrect(float v, float gamma);
     
     // Предопределенные схемы (улучшенные)
-    static std::vector<ColorStop> getSeismicStops();
-    static std::vector<ColorStop> getBWRStops();
     static std::vector<ColorStop> getGrayStops();
     static std::vector<ColorStop> getViridisPlusStops();  // улучшенная версия
     static std::vector<ColorStop> getRedBlueStops();     // классическая сейсмическая
-    static std::vector<ColorStop> getPhaseStops();       // для фазовых данных
-    static std::vector<ColorStop> getAmplitudeStops();   // для амплитудных данных
-    static std::vector<ColorStop> getSpectrumStops();    // радужная схема
     
     // Современные схемы для геофизики
     static std::vector<ColorStop> getPetrelClassicStops();
     static std::vector<ColorStop> getKingdomStops();
-    static std::vector<ColorStop> getSeisWorksStops();
     
     // Статические переменные
     static float s_gamma;

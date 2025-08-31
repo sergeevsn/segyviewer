@@ -34,7 +34,12 @@ public:
     }
     int getStartSample() const { return startSampleIndex; }
     void setColorScheme(const QString& scheme);
-    void setGain(float g) { gain = g; updateEffectiveAmplitudeRange(); colorMapValid = false; emit gainChanged(); }
+    void setGain(float g) { 
+        gain = g; 
+        updateEffectiveAmplitudeRange(); 
+        colorMapValid = false; 
+        emit gainChanged(); 
+    }
     void setGridEnabled(bool enabled) { gridEnabled = enabled; update(); emit gridChanged(); }
     
     // Новые методы для цветовых схем

@@ -421,10 +421,10 @@ void SegyViewer::computePercentiles() {
     // Сортируем амплитуды для вычисления перцентилей
     std::sort(allAmplitudes.begin(), allAmplitudes.end());
     
-    // Вычисляем перцентили от 0 до 100 с шагом 0.1
-    amplitudePercentiles.resize(1001); // 0.0, 0.1, 0.2, ..., 100.0
-    for (int i = 0; i <= 1000; ++i) {
-        float percentile = i / 10.0f; // 0.0, 0.1, 0.2, ..., 100.0
+    // Вычисляем перцентили от 0 до 100 с шагом 0.01 (вместо 0.1)
+    amplitudePercentiles.resize(10001); // 0.00, 0.01, 0.02, ..., 100.00
+    for (int i = 0; i <= 10000; ++i) {
+        float percentile = i / 100.0f; // 0.00, 0.01, 0.02, ..., 100.00
         int index = static_cast<int>((percentile / 100.0f) * (allAmplitudes.size() - 1));
         if (index >= allAmplitudes.size()) index = allAmplitudes.size() - 1;
         amplitudePercentiles[i] = allAmplitudes[index];
@@ -444,13 +444,13 @@ void SegyViewer::updateEffectiveAmplitudeRange() {
     float lowerPercentile = std::max(0.0f, gain - 1.0f);
     float upperPercentile = std::min(100.0f, 101.0f - gain);
     
-    // Преобразуем проценты в индексы (0.1% = 1, 1.0% = 10, 99.0% = 990)
-    int lowerIndex = static_cast<int>(lowerPercentile * 10.0f);
-    int upperIndex = static_cast<int>(upperPercentile * 10.0f);
+    // Преобразуем проценты в индексы (0.01% = 1, 0.1% = 10, 1.0% = 100, 99.0% = 9900)
+    int lowerIndex = static_cast<int>(std::round(lowerPercentile * 100.0f));
+    int upperIndex = static_cast<int>(std::round(upperPercentile * 100.0f));
     
     // Ограничиваем индексы
-    lowerIndex = std::max(0, std::min(lowerIndex, 1000));
-    upperIndex = std::max(lowerIndex, std::min(upperIndex, 1000));
+    lowerIndex = std::max(0, std::min(lowerIndex, 10000));
+    upperIndex = std::max(lowerIndex, std::min(upperIndex, 10000));
     
     // Получаем эффективные границы амплитуд
     effectiveMinAmplitude = amplitudePercentiles[lowerIndex];

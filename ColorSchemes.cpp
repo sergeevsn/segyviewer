@@ -177,54 +177,7 @@ float ColorSchemes::gammaCorrect(float v, float gamma) {
     return std::pow(v, 1.0f / gamma);
 }
 
-// Предопределенные схемы
-std::vector<ColorStop> ColorSchemes::getSeismicStops() {
-    return {
-        {0.00f, QColor(0, 0, 0)},        // черный
-        {0.05f, QColor(0, 0, 64)},       // очень темно-синий
-        {0.10f, QColor(0, 0, 128)},      // темно-синий
-        {0.15f, QColor(0, 0, 192)},      // синий
-        {0.20f, QColor(0, 0, 255)},      // ярко-синий
-        {0.25f, QColor(64, 64, 255)},    // светло-синий
-        {0.30f, QColor(128, 128, 255)},  // голубой
-        {0.35f, QColor(192, 192, 255)},  // светло-голубой
-        {0.40f, QColor(255, 255, 255)},  // белый центр
-        {0.45f, QColor(255, 255, 192)},  // светло-желтый
-        {0.50f, QColor(255, 255, 128)},  // желтый
-        {0.55f, QColor(255, 255, 64)},   // ярко-желтый
-        {0.60f, QColor(255, 255, 0)},    // чистый желтый
-        {0.65f, QColor(255, 192, 0)},    // оранжево-желтый
-        {0.70f, QColor(255, 128, 0)},    // оранжевый
-        {0.75f, QColor(255, 64, 0)},     // красно-оранжевый
-        {0.80f, QColor(255, 0, 0)},      // красный
-        {0.85f, QColor(192, 0, 0)},      // темно-красный
-        {0.90f, QColor(128, 0, 0)},      // очень темно-красный
-        {0.95f, QColor(64, 0, 0)},       // почти черный красный
-        {1.00f, QColor(0, 0, 0)}         // черный
-    };
-}
 
-std::vector<ColorStop> ColorSchemes::getBWRStops() {
-    return {
-        {0.00f, QColor(0, 0, 128)},      // темно-синий
-        {0.05f, QColor(0, 0, 160)},      // синий
-        {0.10f, QColor(0, 0, 192)},      // ярко-синий
-        {0.15f, QColor(0, 0, 224)},      // светло-синий
-        {0.20f, QColor(0, 0, 255)},      // чистый синий
-        {0.25f, QColor(64, 64, 255)},    // голубой
-        {0.30f, QColor(128, 128, 255)},  // светло-голубой
-        {0.35f, QColor(192, 192, 255)},  // очень светло-голубой
-        {0.40f, QColor(255, 255, 255)},  // белый центр
-        {0.45f, QColor(255, 192, 192)},  // очень светло-красный
-        {0.50f, QColor(255, 128, 128)},  // светло-красный
-        {0.55f, QColor(255, 64, 64)},    // красный
-        {0.60f, QColor(255, 0, 0)},      // чистый красный
-        {0.65f, QColor(224, 0, 0)},      // темно-красный
-        {0.70f, QColor(192, 0, 0)},      // очень темно-красный
-        {0.75f, QColor(160, 0, 0)},      // почти черный красный
-        {1.00f, QColor(128, 0, 0)}       // черный красный
-    };
-}
 
 std::vector<ColorStop> ColorSchemes::getGrayStops() {
     return {
@@ -257,42 +210,7 @@ std::vector<ColorStop> ColorSchemes::getRedBlueStops() {
     };
 }
 
-std::vector<ColorStop> ColorSchemes::getPhaseStops() {
-    return {
-        {0.00f, QColor(255, 0, 0)},      // красный
-        {0.17f, QColor(255, 255, 0)},    // желтый
-        {0.33f, QColor(0, 255, 0)},      // зеленый
-        {0.50f, QColor(0, 255, 255)},    // cyan
-        {0.67f, QColor(0, 0, 255)},      // синий
-        {0.83f, QColor(255, 0, 255)},    // magenta
-        {1.00f, QColor(255, 0, 0)}       // красный (циклическая)
-    };
-}
 
-std::vector<ColorStop> ColorSchemes::getAmplitudeStops() {
-    return {
-        {0.00f, QColor(0, 0, 0)},        // черный (нулевая амплитуда)
-        {0.05f, QColor(40, 0, 80)},      // темно-фиолетовый
-        {0.15f, QColor(80, 0, 160)},     // фиолетовый
-        {0.30f, QColor(0, 80, 200)},     // синий
-        {0.50f, QColor(0, 160, 160)},    // cyan
-        {0.70f, QColor(160, 200, 0)},    // зеленый
-        {0.85f, QColor(255, 160, 0)},    // оранжевый
-        {1.00f, QColor(255, 255, 255)}   // белый (максимальная амплитуда)
-    };
-}
-
-std::vector<ColorStop> ColorSchemes::getSpectrumStops() {
-    return {
-        {0.00f, QColor(255, 0, 0)},      // красный
-        {0.17f, QColor(255, 255, 0)},    // желтый
-        {0.33f, QColor(0, 255, 0)},      // зеленый
-        {0.50f, QColor(0, 255, 255)},    // cyan
-        {0.67f, QColor(0, 0, 255)},      // синий
-        {0.83f, QColor(255, 0, 255)},    // magenta
-        {1.00f, QColor(255, 0, 0)}       // красный
-    };
-}
 
 // Улучшенные палитры для сейсмики
 std::vector<ColorStop> ColorSchemes::getPetrelClassicStops() {
@@ -327,17 +245,7 @@ std::vector<ColorStop> ColorSchemes::getKingdomStops() {
     };
 }
 
-std::vector<ColorStop> ColorSchemes::getSeisWorksStops() {
-    return {
-        {0.00f, QColor(0, 0, 128)},      // темно-синий
-        {0.20f, QColor(0, 0, 255)},      // синий
-        {0.40f, QColor(0, 255, 255)},    // cyan
-        {0.50f, QColor(255, 255, 255)},  // белый
-        {0.60f, QColor(255, 255, 0)},    // желтый
-        {0.80f, QColor(255, 0, 0)},      // красный
-        {1.00f, QColor(128, 0, 0)}       // темно-красный
-    };
-}
+
 
 // Основные методы
 QColor ColorSchemes::getColor(float normalizedValue, const QString& schemeName) {
@@ -345,26 +253,14 @@ QColor ColorSchemes::getColor(float normalizedValue, const QString& schemeName) 
     
     if (schemeName == "gray") {
         return interpolateFromPalette(getGrayStops(), normalizedValue);
-    } else if (schemeName == "seismic") {
-        return interpolateFromPalette(getSeismicStops(), normalizedValue);
-    } else if (schemeName == "BWR") {
-        return interpolateFromPalette(getBWRStops(), normalizedValue);
     } else if (schemeName == "viridis") {
         return interpolateFromPalette(getViridisPlusStops(), normalizedValue);
     } else if (schemeName == "red_blue") {
         return interpolateFromPalette(getRedBlueStops(), normalizedValue);
-    } else if (schemeName == "phase") {
-        return interpolateFromPalette(getPhaseStops(), normalizedValue);
-    } else if (schemeName == "amplitude") {
-        return interpolateFromPalette(getAmplitudeStops(), normalizedValue);
-    } else if (schemeName == "spectrum") {
-        return interpolateFromPalette(getSpectrumStops(), normalizedValue);
     } else if (schemeName == "petrel_classic") {
         return interpolateFromPalette(getPetrelClassicStops(), normalizedValue);
     } else if (schemeName == "kingdom") {
         return interpolateFromPalette(getKingdomStops(), normalizedValue);
-    } else if (schemeName == "seisworks") {
-        return interpolateFromPalette(getSeisWorksStops(), normalizedValue);
     } else {
         // Проверяем пользовательские схемы
         auto it = s_customSchemes.find(schemeName);
@@ -403,8 +299,7 @@ std::vector<QColor> ColorSchemes::getColorPalette(const QString& schemeName, int
 
 QStringList ColorSchemes::getAvailableSchemes() {
     QStringList schemes = {
-        "gray", "seismic", "BWR", "viridis", "red_blue", "phase", 
-        "amplitude", "spectrum", "petrel_classic", "kingdom", "seisworks"
+        "gray", "viridis", "red_blue", "petrel_classic", "kingdom"
     };
     
     // Добавляем пользовательские схемы
@@ -447,7 +342,7 @@ QColor ColorSchemes::getSeismicColor(float amplitude, float rms, bool bipolar) {
     } else {
         // Униполярные данные: только положительные амплитуды
         float normalized = std::abs(amplitude) / (rms * 3.0f);
-        return interpolateFromPalette(getAmplitudeStops(), normalized);
+        return interpolateFromPalette(getPetrelClassicStops(), normalized);
     }
 }
 
