@@ -751,7 +751,11 @@ void SegyViewer::updateZoomFromSelection() {
     startTraceIndex += newStartTrace;
     startSampleIndex += newStartSample;
     tracesPerPage = newTracesPerPage;
-    samplesPerPage = newSamplesPerPage;
+    
+    // samplesPerPage должен быть временем в миллисекундах, а не количеством сэмплов
+    // Конвертируем количество сэмплов в время
+    float dt = dataManager->getSampleInterval(); // в миллисекундах
+    samplesPerPage = static_cast<int>(newSamplesPerPage * dt); // время в миллисекундах
     
     // Сбрасываем выделение
     hasZoomSelection = false;
@@ -873,7 +877,12 @@ void SegyViewer::zoomToRegion(int startTrace, int endTrace, int startSample, int
     startTraceIndex = startTrace;
     startSampleIndex = startSample;
     tracesPerPage = endTrace - startTrace;
-    samplesPerPage = endSample - startSample;
+    
+    // samplesPerPage должен быть временем в миллисекундах, а не количеством сэмплов
+    // Конвертируем количество сэмплов в время
+    float dt = dataManager->getSampleInterval(); // в миллисекундах
+    int samplesInRegion = endSample - startSample;
+    samplesPerPage = static_cast<int>(samplesInRegion * dt); // время в миллисекундах
     
     // Сбрасываем выделение
     hasZoomSelection = false;
