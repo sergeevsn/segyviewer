@@ -100,6 +100,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(viewer, &SegyViewer::zoomChanged, this, &MainWindow::onZoomChanged);
     connect(viewer, &SegyViewer::gainChanged, this, &MainWindow::onGainChanged);
     connect(viewer, &SegyViewer::gridChanged, this, &MainWindow::onGridChanged);
+    connect(viewer, &SegyViewer::parametersReset, this, &MainWindow::onParametersReset);
 }
 
 void MainWindow::createMenus() {
@@ -332,6 +333,16 @@ void MainWindow::onGridChanged() {
     // Скролл-бары должны обновляться только при изменении зума (onZoomChanged)
 }
 
+void MainWindow::onParametersReset() {
+    // Сбрасываем скролл-бары при полном сбросе параметров
+    scrollBar->setValue(0);
+    verticalScrollBar->setValue(0);
+    
+    // Обновляем настройки в панели
+    settingsPanel->setGain(1.0f);
+    currentGain = 1.0f;
+}
+
 void MainWindow::traceUnderCursor(int traceIndex, int sampleIndex, float amplitude) {
     float dt = dataManager ? dataManager->getSampleInterval() : 0.0f;
     statusPanel->updateInfo(traceIndex, sampleIndex, amplitude, dt);
@@ -493,7 +504,7 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
     // Изменяем gain при прокрутке колесом мыши
     if (event->angleDelta().y() > 0) {
         // Прокрутка "вперед" (от себя) - увеличиваем gain
-        float newGain = currentGain + 0.1f;
+        float newGain = currentGain + 0.05f;
         if (newGain <= 20.0f) { // Ограничиваем максимальным значением
             currentGain = newGain;
             settingsPanel->setGain(currentGain);
@@ -501,7 +512,7 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
         }
     } else if (event->angleDelta().y() < 0) {
         // Прокрутка "назад" (к себе) - уменьшаем gain
-        float newGain = currentGain - 0.1f;
+        float newGain = currentGain - 0.05f;
         if (newGain >= 0.5f) { // Ограничиваем минимальным значением
             currentGain = newGain;
             settingsPanel->setGain(currentGain);

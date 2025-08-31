@@ -52,6 +52,9 @@ private slots:
     // Слот для обработки изменений грида
     void onGridChanged();
     
+    // Слот для обработки сброса всех параметров
+    void onParametersReset();
+    
     // Метод для обновления заголовка окна
     void updateWindowTitle();
 

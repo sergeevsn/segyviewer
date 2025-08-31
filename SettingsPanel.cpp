@@ -91,8 +91,8 @@ SettingsPanel::SettingsPanel(QWidget* parent)
     QLabel* gainLabel = new QLabel("Gain:", this);
     gainSpinBox = new QDoubleSpinBox(this);
     gainSpinBox->setRange(0.5, 20.0);
-    gainSpinBox->setSingleStep(0.1);
-    gainSpinBox->setDecimals(1);
+    gainSpinBox->setSingleStep(0.05);
+    gainSpinBox->setDecimals(2);
     gainSpinBox->setValue(1.0);
     gainLayout->addWidget(gainLabel);
     gainLayout->addWidget(gainSpinBox);

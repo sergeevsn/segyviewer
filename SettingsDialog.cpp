@@ -26,8 +26,8 @@ SettingsDialog::SettingsDialog(const ViewerSettings& initial, QWidget* parent)
 
     gainSpin = new QDoubleSpinBox(this);
     gainSpin->setRange(0.5, 20.0); // Диапазон для перцентильной нормализации
-    gainSpin->setSingleStep(0.1);
-    gainSpin->setDecimals(1);
+    gainSpin->setSingleStep(0.05);
+    gainSpin->setDecimals(2);
     gainSpin->setValue(initial.gain);
 
     QFormLayout* form = new QFormLayout;

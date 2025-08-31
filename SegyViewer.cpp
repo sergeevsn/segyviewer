@@ -51,7 +51,58 @@ SegyViewer::SegyViewer(QWidget* parent)
 }
 
 void SegyViewer::setDataManager(SegyDataManager* manager) {
+    // Если менеджер данных меняется, сбрасываем все параметры
+    if (dataManager != manager) {
+        resetAllParameters();
+    }
     dataManager = manager;
+}
+
+void SegyViewer::resetAllParameters() {
+    // Сбрасываем все параметры отображения к значениям по умолчанию
+    pageIndex = 0;
+    startTraceIndex = 0;
+    tracesPerPage = 1000;
+    samplesPerPage = 0;  // 0 означает "все время"
+    startSampleIndex = 0;
+    
+    // Сбрасываем параметры цветовых схем к значениям по умолчанию
+    gamma = 1.0f;
+    contrast = 1.0f;
+    brightness = 0.0f;
+    perceptualCorrection = false;
+    
+    // Сбрасываем параметры амплитуд
+    minAmplitude = 0.0f;
+    maxAmplitude = 1.0f;
+    colorMapValid = false;
+    gain = 1.0f;
+    globalStatsComputed = false;
+    
+    // Сбрасываем перцентили
+    amplitudePercentiles.clear();
+    percentilesComputed = false;
+    effectiveMinAmplitude = 0.0f;
+    effectiveMaxAmplitude = 1.0f;
+    
+    // Сбрасываем состояние зума
+    isZooming = false;
+    hasZoomSelection = false;
+    isZoomed = false;
+    
+    // Сбрасываем кэш изображения
+    imageCacheValid = false;
+    
+    // Останавливаем таймер зума
+    if (zoomUpdateTimer) {
+        zoomUpdateTimer->stop();
+    }
+    
+    // Принудительно обновляем отображение
+    update();
+    
+    // Уведомляем об сбросе всех параметров
+    emit parametersReset();
 }
 
 void SegyViewer::setColorScheme(const QString& scheme) {

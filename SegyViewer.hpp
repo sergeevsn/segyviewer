@@ -55,6 +55,7 @@ signals:
     void zoomChanged(); // Сигнал при изменении зума
     void gainChanged(); // Сигнал при изменении гейна
     void gridChanged(); // Сигнал при изменении грида
+    void parametersReset(); // Сигнал при сбросе всех параметров
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -71,6 +72,7 @@ private:
     void updateZoomFromSelection();
     void computePercentiles();
     void updateEffectiveAmplitudeRange();
+    void resetAllParameters(); // Метод для полного сброса всех параметров при смене файла
 
     SegyDataManager* dataManager;
     int pageIndex;
