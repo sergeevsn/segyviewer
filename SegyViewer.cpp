@@ -785,6 +785,40 @@ void SegyViewer::resetZoom() {
     // Останавливаем таймер
     zoomUpdateTimer->stop();
     
+    // Проверяем корректность параметров после восстановления
+    if (dataManager) {
+        int totalTraces = dataManager->traceCount();
+        
+        // Если tracesPerPage больше общего количества трасс, корректируем
+        if (tracesPerPage > totalTraces) {
+            tracesPerPage = totalTraces;
+        }
+        
+        // Если startTraceIndex выходит за границы, корректируем
+        if (startTraceIndex >= totalTraces) {
+            startTraceIndex = 0;
+        }
+        
+        // Если startTraceIndex + tracesPerPage выходит за границы, корректируем
+        if (startTraceIndex + tracesPerPage > totalTraces) {
+            startTraceIndex = std::max(0, totalTraces - tracesPerPage);
+        }
+        
+        // Проверяем корректность параметров времени
+        auto traces = dataManager->getTracesRange(0, 1);
+        if (!traces.empty()) {
+            int totalSamples = traces[0].size();
+            
+            // Если startSampleIndex выходит за границы, корректируем
+            if (startSampleIndex >= totalSamples) {
+                startSampleIndex = 0;
+            }
+            
+            // samplesPerPage - это время в миллисекундах, а не количество сэмплов!
+            // НЕ корректируем samplesPerPage по totalSamples - это разные единицы измерения
+        }
+    }
+    
     // Обновляем отображение
     colorMapValid = false;
     update();
