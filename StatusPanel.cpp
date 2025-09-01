@@ -33,6 +33,6 @@ void StatusPanel::updateInfo(int traceIndex, int sampleIndex, float amplitude, f
 }
 
 void StatusPanel::showZoomHelp() {
-    zoomLabel->setText("Zoom Help: Left drag to select area, Right click to reset, Double click to reset, Menu: View → Reset Zoom");
+    zoomLabel->setText("Zoom Help: Left drag to select area, Right drag to pan, Double click to reset, Menu: View → Reset Zoom");
 }
 

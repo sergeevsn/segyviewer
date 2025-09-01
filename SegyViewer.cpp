@@ -1,6 +1,7 @@
 #include "SegyViewer.hpp"
 #include "SegyDataManager.hpp"
 #include "ColorSchemes.hpp"
+#include "MainWindow.hpp"
 #include <QPainter>
 #include <QMouseEvent>
 #include <algorithm>
@@ -28,6 +29,7 @@ SegyViewer::SegyViewer(QWidget* parent)
       perceptualCorrection(false),  // По умолчанию перцептивная коррекция отключена
       isZooming(false),
       hasZoomSelection(false),
+      isRightButtonDragging(false),
       originalStartTrace(0),
       originalStartSample(0),
       originalTracesPerPage(1000),
@@ -36,7 +38,8 @@ SegyViewer::SegyViewer(QWidget* parent)
       zoomUpdateTimer(new QTimer(this)),
       percentilesComputed(false),
       effectiveMinAmplitude(0.0f),
-      effectiveMaxAmplitude(1.0f)
+      effectiveMaxAmplitude(1.0f),
+      mainWindow(nullptr)
 {
     setMouseTracking(true);
     setAttribute(Qt::WA_OpaquePaintEvent, false); // Отключаем оптимизацию перерисовки
@@ -56,6 +59,10 @@ void SegyViewer::setDataManager(SegyDataManager* manager) {
         resetAllParameters();
     }
     dataManager = manager;
+}
+
+void SegyViewer::setMainWindow(MainWindow* window) {
+    mainWindow = window;
 }
 
 void SegyViewer::resetAllParameters() {
@@ -88,6 +95,7 @@ void SegyViewer::resetAllParameters() {
     // Сбрасываем состояние зума
     isZooming = false;
     hasZoomSelection = false;
+    isRightButtonDragging = false;
     isZoomed = false;
     
     // Сбрасываем кэш изображения
@@ -490,6 +498,30 @@ void SegyViewer::mouseMoveEvent(QMouseEvent* event) {
         repaint(); // Принудительная перерисовка
         return;
     }
+    
+    // Если происходит panning правой кнопкой мыши
+    if (isRightButtonDragging) {
+        QPoint currentPos = event->pos();
+        QPoint delta = currentPos - rightDragLast;
+        
+        // Вычисляем смещение в координатах данных
+        if (mainWindow) {
+            // Перемещаем по горизонтали (трассы)
+            if (delta.x() != 0) {
+                mainWindow->panHorizontal(delta.x());
+            }
+            
+            // Перемещаем по вертикали (время)
+            if (delta.y() != 0) {
+                mainWindow->panVertical(delta.y());
+            }
+            
+            rightDragLast = currentPos;
+        }
+        
+        update();
+        return;
+    }
 
     auto traces = dataManager->getTracesRange(startTraceIndex, tracesPerPage);
     if (traces.empty()) return;
@@ -632,15 +664,23 @@ void SegyViewer::mousePressEvent(QMouseEvent* event) {
         // Запускаем таймер для плавного обновления
         zoomUpdateTimer->start();
     } else if (event->button() == Qt::RightButton) {
-        // Правый клик - сброс зума
-        resetZoom();
+        // Проверяем, есть ли активные скроллбары (зум активен)
+        if (mainWindow && isZoomed) {
+            // Начинаем panning (перемещение по изображению)
+            isRightButtonDragging = true;
+            rightDragStart = event->pos();
+            rightDragLast = event->pos();
+            
+            // Меняем курсор на руку для индикации возможности перетаскивания
+            setCursor(Qt::ClosedHandCursor);
+        }
     }
 }
 
 void SegyViewer::mouseReleaseEvent(QMouseEvent* event) {
-    if (!dataManager || !isZooming) return;
+    if (!dataManager) return;
 
-    if (event->button() == Qt::LeftButton) {
+    if (event->button() == Qt::LeftButton && isZooming) {
         isZooming = false;
         zoomEnd = event->pos();
         
@@ -656,6 +696,14 @@ void SegyViewer::mouseReleaseEvent(QMouseEvent* event) {
         
         // Останавливаем таймер
         zoomUpdateTimer->stop();
+        
+        update();
+    } else if (event->button() == Qt::RightButton && isRightButtonDragging) {
+        // Завершаем panning
+        isRightButtonDragging = false;
+        
+        // Возвращаем обычный курсор
+        setCursor(Qt::ArrowCursor);
         
         update();
     }

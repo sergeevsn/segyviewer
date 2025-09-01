@@ -9,11 +9,14 @@
 
 class SegyDataManager;
 
+class MainWindow; // Forward declaration
+
 class SegyViewer : public QWidget {
     Q_OBJECT
 public:
     explicit SegyViewer(QWidget* parent = nullptr);
     void setDataManager(SegyDataManager* manager);
+    void setMainWindow(MainWindow* mainWindow); // Метод для установки ссылки на MainWindow
     void setCurrentPage(int page);
     void setStartTrace(int traceIndex);
     int currentPage() const { return pageIndex; }
@@ -113,6 +116,11 @@ private:
     QPoint zoomEnd;
     bool hasZoomSelection;
     
+    // Переменные для dragging правой кнопкой мыши
+    bool isRightButtonDragging;
+    QPoint rightDragStart;
+    QPoint rightDragLast;
+    
     // Состояние зума
     int originalStartTrace;
     int originalStartSample;
@@ -136,4 +144,7 @@ private:
     int lastRenderedSamplesPerPage;
     float lastRenderedGain;
     QString lastRenderedColorScheme;
+    
+    // Ссылка на MainWindow для доступа к скроллбарам
+    MainWindow* mainWindow;
 };

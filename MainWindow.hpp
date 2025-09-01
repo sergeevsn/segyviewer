@@ -18,6 +18,15 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    
+    // Методы для доступа к скроллбарам (для SegyViewer)
+    QScrollBar* getHorizontalScrollBar() const { return scrollBar; }
+    QScrollBar* getVerticalScrollBar() const { return verticalScrollBar; }
+    bool hasActiveScrollBars() const;
+    
+    // Методы для перемещения по скроллбарам (для panning)
+    void panHorizontal(int delta);
+    void panVertical(int delta);
 
 private slots:
     void openAsTraces();

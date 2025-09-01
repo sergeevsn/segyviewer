@@ -83,6 +83,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     createMenus();
     setupScrollBar();
+    
+    // Устанавливаем связь между MainWindow и SegyViewer для доступа к скроллбарам
+    viewer->setMainWindow(this);
 
     // Подключаем сигналы от панели настроек
     connect(settingsPanel, &SettingsPanel::settingsChanged, this, &MainWindow::onSettingsChanged);
@@ -692,6 +695,29 @@ void MainWindow::updateWindowTitle() {
         QFileInfo fileInfo(currentFileName);
         QString fileName = fileInfo.fileName();
         setWindowTitle(QString("SEG-Y Viewer - %1").arg(fileName));
+    }
+}
+
+bool MainWindow::hasActiveScrollBars() const {
+    // Проверяем, есть ли активные скроллбары (видимые и с диапазоном > 0)
+    bool horizontalActive = scrollBar->isVisible() && scrollBar->maximum() > 0;
+    bool verticalActive = verticalScrollBar->isVisible() && verticalScrollBar->maximum() > 0;
+    return horizontalActive || verticalActive;
+}
+
+void MainWindow::panHorizontal(int delta) {
+    if (scrollBar->isVisible() && scrollBar->maximum() > 0) {
+        int newValue = scrollBar->value() - delta;
+        newValue = std::max(scrollBar->minimum(), std::min(newValue, scrollBar->maximum()));
+        scrollBar->setValue(newValue);
+    }
+}
+
+void MainWindow::panVertical(int delta) {
+    if (verticalScrollBar->isVisible() && verticalScrollBar->maximum() > 0) {
+        int newValue = verticalScrollBar->value() - delta;
+        newValue = std::max(verticalScrollBar->minimum(), std::min(newValue, verticalScrollBar->maximum()));
+        verticalScrollBar->setValue(newValue);
     }
 }
 
