@@ -6,7 +6,7 @@
 StatusPanel::StatusPanel(QWidget *parent)
     : QWidget(parent), 
       traceLabel(new QLabel("Trace: -, Time: -, Amp: -", this)),
-      zoomLabel(new QLabel("Zoom: Left drag to select, Right click to reset, Double click to reset", this))
+      zoomLabel(new QLabel("Zoom: Left drag to select, Right drag to pan, Double click to reset", this))
 {
     QHBoxLayout* layout = new QHBoxLayout(this);
     layout->setContentsMargins(4,2,4,2);

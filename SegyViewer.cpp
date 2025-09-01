@@ -39,7 +39,12 @@ SegyViewer::SegyViewer(QWidget* parent)
       percentilesComputed(false),
       effectiveMinAmplitude(0.0f),
       effectiveMaxAmplitude(1.0f),
-      mainWindow(nullptr)
+      mainWindow(nullptr),
+      lastProcessedColorScheme(""),
+      lastProcessedGamma(1.0f),
+      lastProcessedContrast(1.0f),
+      lastProcessedBrightness(0.0f),
+      lastProcessedPerceptualCorrection(false)
 {
     setMouseTracking(true);
     setAttribute(Qt::WA_OpaquePaintEvent, false); // Отключаем оптимизацию перерисовки
@@ -91,6 +96,13 @@ void SegyViewer::resetAllParameters() {
     percentilesComputed = false;
     effectiveMinAmplitude = 0.0f;
     effectiveMaxAmplitude = 1.0f;
+    
+    // Сбрасываем переменные отслеживания
+    lastProcessedColorScheme = "";
+    lastProcessedGamma = 1.0f;
+    lastProcessedContrast = 1.0f;
+    lastProcessedBrightness = 0.0f;
+    lastProcessedPerceptualCorrection = false;
     
     // Сбрасываем состояние зума
     isZooming = false;
@@ -362,32 +374,10 @@ void SegyViewer::paintEvent(QPaintEvent* /*event*/) {
 void SegyViewer::updateColorMap() {
     if (!dataManager) return;
 
-    if (!globalStatsComputed) {
-        auto traces = dataManager->getTracesRange(0, 1000);
-        if (!traces.empty()) {
-            minAmplitude = std::numeric_limits<float>::max();
-            maxAmplitude = std::numeric_limits<float>::lowest();
-
-            for (const auto& trace : traces) {
-                for (float amplitude : trace) {
-                    if (std::isfinite(amplitude)) {
-                        minAmplitude = std::min(minAmplitude, amplitude);
-                        maxAmplitude = std::max(maxAmplitude, amplitude);
-                    }
-                }
-            }
-
-            if (std::abs(maxAmplitude - minAmplitude) < 1e-6) {
-                maxAmplitude = minAmplitude + 1.0f;
-            }
-            
-            globalStatsComputed = true;
-        }
+    // Вычисляем всю статистику в одном проходе только если необходимо
+    if (needsStatisticsUpdate()) {
+        computeAllStatisticsInOnePass();
     }
-    
-    // Вычисляем перцентили и эффективные границы
-    computePercentiles();
-    updateEffectiveAmplitudeRange();
 
     // Заполняем LUT (1024 цвета для лучшего качества)
     const int colorMapSize = 1024;
@@ -406,47 +396,95 @@ void SegyViewer::updateColorMap() {
     colorMapValid = true;
 }
 
-void SegyViewer::computePercentiles() {
-    if (!dataManager || percentilesComputed) return;
+bool SegyViewer::needsStatisticsUpdate() const {
+    // Проверяем, нужно ли пересчитывать статистику
+    return !globalStatsComputed || 
+           !percentilesComputed || 
+           colorScheme != lastProcessedColorScheme ||
+           std::abs(gamma - lastProcessedGamma) > 1e-6 ||
+           std::abs(contrast - lastProcessedContrast) > 1e-6 ||
+           std::abs(brightness - lastProcessedBrightness) > 1e-6 ||
+           perceptualCorrection != lastProcessedPerceptualCorrection;
+}
+
+void SegyViewer::computeAllStatisticsInOnePass() {
+    if (!dataManager || globalStatsComputed) return;
     
-    // Получаем все амплитуды для вычисления перцентилей
-    auto traces = dataManager->getTracesRange(0, 1000); // Используем первые 1000 трасс для статистики
+    // Получаем трассы для анализа (первые 1000 для статистики)
+    auto traces = dataManager->getTracesRange(0, 1000);
     if (traces.empty()) return;
     
+    // Инициализируем переменные для статистики
+    minAmplitude = std::numeric_limits<float>::max();
+    maxAmplitude = std::numeric_limits<float>::lowest();
+    
+    // Вектор для сбора всех амплитуд (с предварительным выделением памяти)
     std::vector<float> allAmplitudes;
     allAmplitudes.reserve(1000 * 1000); // Предварительно выделяем память
     
+    // Один проход по всем трассам для сбора всей статистики
     for (const auto& trace : traces) {
         for (float amplitude : trace) {
             if (std::isfinite(amplitude)) {
+                // Обновляем min/max амплитуды
+                minAmplitude = std::min(minAmplitude, amplitude);
+                maxAmplitude = std::max(maxAmplitude, amplitude);
+                
+                // Собираем амплитуды для перцентилей
                 allAmplitudes.push_back(amplitude);
             }
         }
     }
     
-    if (allAmplitudes.empty()) return;
-    
-    // Сортируем амплитуды для вычисления перцентилей
-    std::sort(allAmplitudes.begin(), allAmplitudes.end());
-    
-    // Вычисляем перцентили от 0 до 100 с шагом 0.01 (вместо 0.1)
-    amplitudePercentiles.resize(10001); // 0.00, 0.01, 0.02, ..., 100.00
-    for (int i = 0; i <= 10000; ++i) {
-        float percentile = i / 100.0f; // 0.00, 0.01, 0.02, ..., 100.00
-        int index = static_cast<int>((percentile / 100.0f) * (allAmplitudes.size() - 1));
-        if (index >= allAmplitudes.size()) index = allAmplitudes.size() - 1;
-        amplitudePercentiles[i] = allAmplitudes[index];
+    // Проверяем корректность min/max
+    if (std::abs(maxAmplitude - minAmplitude) < 1e-6) {
+        maxAmplitude = minAmplitude + 1.0f;
     }
     
-    percentilesComputed = true;
+    // Вычисляем перцентили, если есть данные
+    if (!allAmplitudes.empty()) {
+        // Сортируем амплитуды для вычисления перцентилей
+        std::sort(allAmplitudes.begin(), allAmplitudes.end());
+        
+        // Вычисляем перцентили от 0 до 100 с шагом 0.01
+        amplitudePercentiles.resize(10001); // 0.00, 0.01, 0.02, ..., 100.00
+        for (int i = 0; i <= 10000; ++i) {
+            float percentile = i / 100.0f; // 0.00, 0.01, 0.02, ..., 100.00
+            int index = static_cast<int>((percentile / 100.0f) * (allAmplitudes.size() - 1));
+            if (index >= allAmplitudes.size()) index = allAmplitudes.size() - 1;
+            amplitudePercentiles[i] = allAmplitudes[index];
+        }
+        
+        percentilesComputed = true;
+        
+        // Вычисляем эффективные границы амплитуд
+        updateEffectiveAmplitudeRange();
+    }
+    
+    // Отмечаем, что глобальная статистика вычислена
+    globalStatsComputed = true;
+    
+    // Обновляем переменные отслеживания
+    lastProcessedColorScheme = colorScheme;
+    lastProcessedGamma = gamma;
+    lastProcessedContrast = contrast;
+    lastProcessedBrightness = brightness;
+    lastProcessedPerceptualCorrection = perceptualCorrection;
+}
+
+void SegyViewer::computePercentiles() {
+    // Этот метод больше не используется, но оставляем для совместимости
+    if (!percentilesComputed) {
+        computeAllStatisticsInOnePass();
+    }
 }
 
 void SegyViewer::updateEffectiveAmplitudeRange() {
     if (!percentilesComputed) {
-        computePercentiles();
+        // Если перцентили не вычислены, вызываем основной метод
+        computeAllStatisticsInOnePass();
+        return;
     }
-    
-    if (!percentilesComputed) return;
     
     // Применяем формулу: gain = [gain - 1.0, 101 - gain]
     float lowerPercentile = std::max(0.0f, gain - 1.0f);
@@ -948,7 +986,7 @@ QString SegyViewer::getZoomHelpText() const {
     return QString(
         "Zoom Controls:\n"
         "• Left mouse button + drag: Select area to zoom\n"
-        "• Right mouse button: Reset zoom\n"
+        "• Right mouse button + drag: Pan in zoom mode\n"
         "• Double left click: Reset zoom\n"
         "• Menu: View → Reset Zoom"
     );

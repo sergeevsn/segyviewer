@@ -11,6 +11,9 @@ class SegyDataManager;
 
 class MainWindow; // Forward declaration
 
+// Forward declaration для ColorStop
+struct ColorStop;
+
 class SegyViewer : public QWidget {
     Q_OBJECT
 public:
@@ -57,6 +60,17 @@ public:
     void resetZoomTracesOnly();   // Сброс зума только по трассам
     void zoomToRegion(int startTrace, int endTrace, int startSample, int endSample);
     QString getZoomHelpText() const;
+
+    // Утилиты (публичные для доступа из ColorScheme)
+    static float normalizeValue(float v);
+    static float contrastAdjust(float v, float contrast, float brightness);
+    static QColor interpolateFromPalette(const std::vector<ColorStop>& stops, float value);
+    
+    // Оптимизированный метод для вычисления всей статистики в одном проходе
+    void computeAllStatisticsInOnePass();
+    
+    // Проверка необходимости пересчета статистики
+    bool needsStatisticsUpdate() const;
 
 signals:
     void traceInfoUnderCursor(int traceIndex, int sampleIndex, float amplitude);
@@ -130,6 +144,13 @@ private:
     
     // Таймер для обновления зума
     QTimer* zoomUpdateTimer;
+    
+    // Переменные для отслеживания последних обработанных параметров
+    QString lastProcessedColorScheme;
+    float lastProcessedGamma;
+    float lastProcessedContrast;
+    float lastProcessedBrightness;
+    bool lastProcessedPerceptualCorrection;
 
     std::vector<uint32_t> lut; // таблица цветов (256 уровней)
     
