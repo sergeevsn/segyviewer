@@ -178,12 +178,11 @@ void MainWindow::openSettings() {
     // Этот метод оставлен для совместимости, но не используется
 }
 
-void MainWindow::openAsTraces() {
-    QString fileName = QFileDialog::getOpenFileName(this, "Open SEG-Y File", "", "SEG-Y Files (*.sgy *.segy)");
-    if (fileName.isEmpty())
+void MainWindow::openFile(const QString& filePath) {
+    if (filePath.isEmpty())
         return;
 
-    if (!dataManager->loadFile(fileName.toStdString())) {
+    if (!dataManager->loadFile(filePath.toStdString())) {
         QMessageBox::warning(this, "Error", "Failed to load SEG-Y file");
         // Сбрасываем информацию о файле в SettingsPanel
         settingsPanel->setFileInfo(0, 0.0f, 0);
@@ -199,7 +198,7 @@ void MainWindow::openAsTraces() {
     }
     
     // Сохраняем имя файла и обновляем заголовок окна
-    currentFileName = fileName;
+    currentFileName = filePath;
     updateWindowTitle();
 
     viewer->setDataManager(dataManager);
@@ -298,6 +297,15 @@ void MainWindow::openAsTraces() {
     }
     
     viewer->update();
+}
+
+void MainWindow::openAsTraces() {
+    QString fileName = QFileDialog::getOpenFileName(this, "Open SEG-Y File", "", "SEG-Y Files (*.sgy *.segy)");
+    if (fileName.isEmpty())
+        return;
+
+    // Используем общий метод openFile для загрузки файла
+    openFile(fileName);
 }
 
 void MainWindow::onScrollBarChanged(int value) {

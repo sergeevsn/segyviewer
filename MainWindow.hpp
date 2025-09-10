@@ -27,6 +27,9 @@ public:
     // Методы для перемещения по скроллбарам (для panning)
     void panHorizontal(int delta);
     void panVertical(int delta);
+    
+    // Публичный метод для открытия файла по пути (для командной строки)
+    void openFile(const QString& filePath);
 
 private slots:
     void openAsTraces();
